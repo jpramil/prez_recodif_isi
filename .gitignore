@@ -1,0 +1,22 @@
+# Quarto
+/.quarto/
+*_files/
+*_cache/
+*.html
+!index.html
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
