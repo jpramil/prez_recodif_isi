@@ -1,0 +1,35 @@
+project:
+  type: default
+  title: "Recoding Administrative Data — NACE Rev. 2.1"
+  output-dir: _output
+  resources:
+    - "_extensions/"
+    - "css/"
+    - "img/"
+    - "js/"
+    - "modulesCompl/"
+    - "*.html"
+    - "*_files/"
+  render:
+    - "*.qmd"
+
+format:
+  insee-clair-revealjs: default
+
+fig-cap-location: bottom
+
+from: markdown+emoji
+lang: "en"
+
+execute:
+  echo: false
+  cache: false
+  message: false
+  warning: false
+  error: true
+
+revealjs-plugins:
+  - pointer
+  - confetti
+  - verticator
+  - multimodal
