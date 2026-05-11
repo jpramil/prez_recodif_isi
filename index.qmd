@@ -1,14 +1,13 @@
 ---
-title: "Recoding Administrative Data for an Evolving Classification"
-subtitle: "Leveraging Large Language Models for the NACE Rev. 2 → Rev. 2.1 Transition at Insee"
+title: "When Classifications Change but Deadlines Don’t: Scaling Recoding with LLMs"
+subtitle: "The NACE Rev. 2 → Rev. 2.1 Transition at Insee"
 author:
   - name: "Julien PRAMIL"
     email: "julien.pramil@insee.fr"
     affiliations:
       - name: "Insee — French National Institute of Statistics and Economic Studies"
         department: "Directorate of statistical methodology"
-date: today
-date-format: "DD/MM/YYYY"
+date: "04/06/2026"
 description: |
   International Conference on Public Statistics — Recoding administrative data with LLMs
 
@@ -34,46 +33,20 @@ Introduction
 :::
 
 1. **The problem** — A model whose target variable is changing
-2. **NACE 2.1 and the multivocal codes** — Why a simple mapping is not enough
-3. **Human and virtual annotation** — Combining expert and machine knowledge
-4. **Methodology** — A constrained, context-augmented LLM pipeline
-5. **Infrastructure** — Open-source MLOps on the SSPCloud
-6. **Results** — Performance of the retrained classifier
-7. **An alternative: pure RAG** — When no legacy labels exist
-8. **Conclusion and perspectives**
+2. **Human and virtual annotation** — Combining expert and machine knowledge
+3. **Methodology** — A constrained, context-augmented LLM pipeline
+4. **Infrastructure** — Open-source MLOps on the SSPCloud
+5. **Results** — Performance of the retrained classifier
+6. **An alternative: pure RAG** — When no legacy labels exist
+7. **Conclusion and perspectives**
 
 ::: {.notes}
-Here is the roadmap for the next twenty minutes. I will start by framing the problem — what specifically breaks when an official classification is revised. Then I will describe NACE Rev. 2.1 and the central technical difficulty: what we call "multivocal" codes, where one old code maps to several new ones. I will explain how we combined a human annotation campaign with a virtual one based on Large Language Models. I will then walk you through the methodology, the infrastructure we built on top of open-source tools, and the empirical results. I will close with a discussion of an alternative approach based on retrieval-augmented generation, which we are currently exploring for situations where no legacy labels exist at all.
+This is the roadmap for the next twenty minutes. I will frame the problem — what specifically breaks when an official classification is revised, a situation every statistical institute eventually faces. I will then explain how we combined a human annotation campaign with a virtual one based on Large Language Models. I will walk you through the methodology, the infrastructure we built on top of open-source tools, and the empirical results. I will close with an alternative approach based on retrieval-augmented generation, which we are exploring for situations where no legacy labels exist.
 :::
 
 # 1. The Problem {#chapters_1 .backgroundTitre_violet}
 
-## Machine learning models in official statistics {#section_1_1 .backgroundStandard_violet}
-
-:::{.enteteAvecTitre}
-The Problem
-:::
-
-- More and more ML models are being **deployed in production** at Insee
-- Multiple use cases for **automatic coding**:
-  - **NACE** (economic activity)
-  - **COICOP** (household consumption)
-  - **ISCO / PCS** (occupations)
-  - **CPA** (products)
-- **Today's focus**: the principal economic activity of enterprises (APE — based on NACE)
-
-::: {.callout-note}
-## Quality Assurance Framework of the European Statistical System
-> Source data, integrated data, intermediate results and statistical outputs must be **regularly assessed and validated**.
-:::
-
-::: {.notes}
-Like many of your institutes, Insee has been moving an increasing number of machine learning models into production. We have several active classification use cases — household consumption coded against COICOP, occupations against ISCO, products against CPA — but the one I will focus on today is the coding of the principal economic activity of enterprises, which we call APE in France and which is based directly on the European NACE classification.
-
-A point worth stressing here: under the European Statistical System Quality Assurance Framework, statistical outputs must be regularly assessed and validated. This applies to ML models as well — they are not "set and forget". They need maintenance, and that maintenance becomes especially demanding when the target variable itself changes.
-:::
-
-## The data source: a regulatory shift {#section_1_2 .backgroundStandard_violet}
+## When a classification is revised {#section_1_1 .backgroundStandard_violet}
 
 :::{.enteteAvecTitre}
 The Problem
@@ -81,60 +54,7 @@ The Problem
 
 ::: {.columns}
 
-::: {.column width="55%"}
-**The PACTE Law (January 2023)**
-
-- All business filings now go through a **single online portal**
-- Operated by the **INPI**
-- Replaces the historical network of CFE (Business Formality Centres)
-- **Free-text** activity descriptions, no longer normalised
-:::
-
-::: {.column width="45%"}
-**Example of an incoming description**
-
-> *"I want to develop my activity in the cleaning and maintenance of office buildings: emptying bins, vacuuming, mopping the floor"*
-
-➡️ Noisy, colloquial, often misspelled
-:::
-
-:::
-
-::: {.notes}
-A bit of context on the data we deal with. Since January 2023, following the PACTE Law in France, every business formality must be filed through a single online portal operated by the National Institute for Industrial Property — the INPI. This replaced a historical network of intermediaries, the Business Formality Centres or CFE, where human agents would help structure and clean the activity descriptions.
-
-The consequence of this reform is that we now receive raw, unstructured, free-text descriptions written directly by the entrepreneur. As you can see in the example, they are colloquial, sometimes ungrammatical, often misspelled. The volume is high — several thousand new businesses every day — so manual coding is not feasible at scale. This is precisely why automatic classification is essential for us.
-:::
-
-## SIRENE and the historical model {#section_1_3 .backgroundStandard_violet}
-
-:::{.enteteAvecTitre}
-The Problem
-:::
-
-- **SIRENE** = the French business register since the 1970s
-- Allocates the **SIREN**, **SIRET**, and **APE** identifiers
-- Recently migrated to **SIRENE 4**: real-time, streaming architecture
-- The legacy expert system **SICORE** could only auto-code about **30 %** of cases
-- **End of 2022**: deployment of a supervised ML model (fastText)
-  - ➡️ Now auto-codes around **65 %** of incoming filings
-  - The remainder is sent for manual review
-
-::: {.notes}
-SIRENE is the French business register, and it has been operating since the 1970s. It assigns three identifiers: the SIREN — the legal entity number — the SIRET for each establishment, and the APE code, which is the principal economic activity. You see the APE printed on every receipt in France.
-
-Last year SIRENE migrated from a batch architecture to a real-time streaming one — this is what we call SIRENE 4. With this volume and the diversity of free-text inputs, the old expert-rule system, SICORE, could only handle around 30 percent of cases automatically. So at the end of 2022 we deployed a supervised ML model based on fastText, which now auto-codes about 65 percent of the incoming flow, with the rest going to human review.
-
-This is the production setting. Now imagine that the target classification of this model is about to change.
-:::
-
-## What breaks when a classification is revised? {#section_1_4 .backgroundStandard_violet}
-
-:::{.enteteAvecTitre}
-The Problem
-:::
-
-::: {.columns}
+A recurring challenge for every statistical institute (NACE, COICOP, ISCO, …). 
 
 ::: {.column width="50%"}
 **Standard ML maintenance**
@@ -155,76 +75,67 @@ The Problem
 
 :::
 
-::: {.fragment .fade-in}
+- At Insee, a **fastText** classifier in production since 2023 to assign NACE 2.0 codes
+- Trained on a 2.7 millions labels trainset.
+
 **Central question**: how can we leverage years of accumulated production knowledge in the old classification to bootstrap a model in the new one?
-:::
 
 ::: {.notes}
-This is the structural problem at the heart of my talk. In normal machine learning maintenance, what changes over time is the input distribution — what we call data drift — and you address it by retraining on fresh manually labelled data. The target variable, the Y you are predicting, stays the same.
+Classification revisions are a recurring challenge in official statistics — every institute eventually faces them, whether for NACE, COICOP, ISCO, CPA, or others. They are structurally different from routine ML maintenance.
 
-When a classification is revised, the situation is fundamentally different. The Y itself changes. The codes you trained on no longer exist, or their semantic content has shifted. Newly labelled data in the new nomenclature are either unavailable or, at best, very limited — because human annotation in a brand-new classification is slow, expensive, and requires experts who are themselves still learning the new rules.
+In normal maintenance, what changes over time is the input distribution — data drift — and you address it by retraining on fresh manually labelled data. The target variable, the Y you are predicting, stays the same.
 
-So the central question of our project becomes: we have ten million labels in the old classification reflecting years of production knowledge — how can we leverage this asset to bootstrap a model in the new one, without waiting two or three years for a fresh manually-labelled corpus?
+When a classification is revised, the situation is fundamentally different. The Y itself changes. The codes you trained on no longer exist, or their semantic content has shifted. Newly labelled data in the new nomenclature are unavailable or, at best, very limited — because human annotation in a brand-new classification is slow, expensive, and requires experts who are themselves still learning the new rules.
+
+To make this concrete: at Insee we have a fastText classifier in production since 2023, automatically assigning NACE 2.0 codes to incoming free-text business descriptions. Years of operation have accumulated 2.7 millions of validated labels in NACE 2.0. The central question of our project becomes: how can we leverage this asset to bootstrap a model in the new classification, without waiting two or three years for a fresh manually-labelled corpus?
 :::
 
-# 2. NACE 2.1 and the Multivocal Codes {#chapters_2 .backgroundTitre_jaune}
-
-## NACE Rev. 2.1: the timeline {#section_2_1 .backgroundStandard_jaune}
+## Our strategy: shifting the old trainset {#section_1_2 .backgroundStandard_violet}
 
 :::{.enteteAvecTitre}
-NACE 2.1 and the Multivocal Codes
+The Problem
+:::
+
+![](img/schema_recodif_ape.png){fig-align="center"}
+
+::: {.notes}
+Our goal si to use LLMs only once, off-line, to relabel our legacy NACE 2.0  
+training corpus into NACE 2.1 — not as a real-time auto-coder. A new 
+production classifier is then trained on the relabelled corpus.
+:::
+
+## NACE 2.0 → 2.1 and the multivocal codes {#section_1_3 .backgroundStandard_violet}
+
+:::{.enteteAvecTitre}
+The Problem
 :::
 
 ::: {.columns}
 
 ::: {.column width="50%"}
-- **2025** — Dual coding period
-  - SIRUS: full historical recoding by end of 2025
-  - SIRENE: integration of NACE 2.1 in flow + MLOps infrastructure
-- **2026** — Quality improvement of the new coding
-- **2027** — NACE 2.1 becomes the production standard, NACE 2.0 maintained in parallel
-:::
+**Timeline at Insee**
 
-::: {.column width="50%"}
+- **2025** — Dual coding period
+- **2026** — Quality improvement
+- **2027** — NACE 2.1 becomes the production standard
+
 **Scope of the change**
 
-- Level 5 (sub-classes): **746** vs **732** previously
-- Mostly splits at level 4 (class)
-- But also some merges and recompositions
-:::
-
-:::
-
-::: {.notes}
-Let me give you the timeline. NACE Rev. 2.1 is being adopted progressively across European statistical institutes. At Insee, 2025 is a dual-coding year: our structural business register, SIRUS, is being fully recoded by the end of the year, while SIRENE — the live business register — is integrating the new classification in flow, together with a new MLOps infrastructure. The year 2026 is dedicated to quality improvement, and in 2027 NACE 2.1 becomes the production standard, while we continue to maintain the old coding in parallel for continuity.
-
-In terms of magnitude, the change is significant but not revolutionary. At the most detailed level — level 5, which we call sub-classes — we go from 732 categories to 746. Most of the changes are splits at the class level, but there are also a few merges and recompositions. The headline number, 746 versus 732, hides the real complexity, which I will now describe.
-:::
-
-## Univocal vs. multivocal mappings {#section_2_2 .backgroundStandard_jaune}
-
-:::{.enteteAvecTitre}
-NACE 2.1 and the Multivocal Codes
-:::
-
-::: {.columns}
-
-::: {.column width="50%"}
-**Univocal codes** (1-to-1)
-
-- 551 classes
-- Direct mapping
-- Trivially recoded
-- ✅ The easy case
+- Level 5 (sub-classes): **746** vs **732**
+- Mostly splits at level 4, with a few merges and recompositions
 :::
 
 ::: {.column width="50%"}
-**Multivocal codes** (1-to-N)
+**Univocal codes** (1-to-1) — 551 classes — direct mapping.
 
-- 181 classes
-- One source code → several target codes
-- Up to **38** candidates in extreme cases
-- ⚠️ Requires expert judgement on the activity description
+**Multivocal codes** (1-to-N) — 181 classes — one source code → up to **38** candidates.
+
+| | Multivocal | Univocal |
+|---|---|---|
+| Correspondence table | 25 % | 75 % |
+| Actual training set | **52 %** | 48 % |
+
+Roughly **1.4 M observations** that cannot be recoded by a table lookup.
 :::
 
 :::
@@ -232,54 +143,18 @@ NACE 2.1 and the Multivocal Codes
 [The problem cannot be solved by a deterministic mapping table alone.]{.bold}
 
 ::: {.notes}
-Here is the central technical difficulty. The correspondence between NACE 2.0 and NACE 2.1 is not a bijection. We have two kinds of cases.
+NACE Rev. 2.1 is being adopted progressively across European statistical institutes. At Insee, 2025 is a dual-coding year; 2026 is dedicated to quality improvement; in 2027 NACE 2.1 becomes the production standard while we maintain the old coding in parallel for continuity.
 
-The univocal codes are easy: 551 classes have a one-to-one mapping. You apply the correspondence table and you are done. No ambiguity, no decision to make.
+The change is significant but not revolutionary. At the most detailed level — sub-classes — we go from 732 categories to 746. Most of the changes are splits at the class level, with a few merges and recompositions.
 
-The multivocal codes are the hard part. We have 181 classes where one old code maps to multiple possible new codes — sometimes two, sometimes three, but in some extreme cases up to 38 candidate target codes for a single source code. In those cases, the correspondence table alone cannot tell you which new code is right. You need to look back at the actual activity description of the enterprise and apply expert judgement to disambiguate. And that, fundamentally, is a classification task in itself.
+The headline number hides the real complexity. The correspondence between NACE 2.0 and NACE 2.1 is not a bijection. Univocal codes are easy: 551 classes have a one-to-one mapping. The hard part is the 181 multivocal classes, where one old code maps to multiple new codes — sometimes two, sometimes three, but in extreme cases up to 38 candidate target codes for a single source code. The correspondence table alone cannot tell you which new code is right; you need to look at the actual activity description and apply expert judgement.
+
+We were initially hopeful that, even though some codes are multivocal in theory, they would be rare in practice. That hope was misplaced. About 25 percent of theoretical codes are multivocal, but once you weight by the actual distribution of observations in our training set, the figure jumps to 52 percent. In absolute numbers, this is roughly 1.4 million observations that cannot be automatically recoded by a simple table lookup — far too many for human experts to process in any reasonable timeframe.
 :::
 
-## How big is the multivocal problem in practice? {#section_2_3 .backgroundStandard_jaune}
+# 2. Human and Virtual Annotation {#chapters_2 .backgroundTitre_vert}
 
-:::{.enteteAvecTitre}
-NACE 2.1 and the Multivocal Codes
-:::
-
-**Training set**: ~2.7 million observations from SIRENE 4
-
-::: {.columns}
-
-::: {.column width="50%"}
-### In the correspondence table
-| Multivocal | Univocal |
-|------------|----------|
-| **25 %**   | 75 %     |
-:::
-
-::: {.column width="50%"}
-### In our actual training set
-| Multivocal | Univocal |
-|------------|----------|
-| **52 %**   | 48 %     |
-:::
-
-:::
-
-::: {.fragment .fade-in}
-➡️ **~1.4 million observations** that cannot be recoded by a table lookup
-:::
-
-::: {.notes}
-We were initially hopeful that, even though some codes are multivocal in theory, they would be rare in practice. Unfortunately, this hope was misplaced.
-
-If you look at the correspondence table itself, the proportion is reasonable — about 25 percent of theoretical codes are multivocal. But once you weight by the actual distribution of observations in our training set, that figure jumps to 52 percent. More than half of the data points we need to recode fall into the ambiguous cases.
-
-In absolute numbers, this means roughly 1.4 million observations from SIRENE 4 that cannot be automatically recoded by a simple table lookup. That is far too many for human experts to process in any reasonable timeframe. So we needed another solution.
-:::
-
-# 3. Human and Virtual Annotation {#chapters_3 .backgroundTitre_vert}
-
-## Two annotation campaigns {#section_3_1 .backgroundStandard_vert}
+## Annotation: human and virtual {#section_2_1 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
 Human and Virtual Annotation
@@ -288,69 +163,47 @@ Human and Virtual Annotation
 ::: {.columns}
 
 ::: {.column width="50%"}
-### 1. Gold standard in NACE 2.0
+### Two annotation campaigns
+
+**1. Gold standard in NACE 2.0**
+
 - ~10,000 annotations in the **current** classification
-- 6 expert annotators from the **SIRENE Quality Office**
-- Blind annotation, no auto-coding aid
-- Purpose: **validate** the precision of the legacy labels
+- 6 expert annotators, blind annotation
+- Purpose: **validate** legacy label precision
+
+**2. Ground truth in NACE 2.1**
+
+- ~30,000 annotations on **multivocal cases**
+- ~25 business experts across France
+- Candidates pre-filtered using the NACE 2.0 code
+- Purpose: **benchmark** for the LLM pipeline
+
+For each item: assign a code, delegate, or mark as uncodable.
 :::
 
 ::: {.column width="50%"}
-### 2. Ground truth in NACE 2.1
-- ~30,000 annotations on **multivocal cases**
-- ~25 APE business experts across France
-- Candidate codes pre-filtered using the NACE 2.0 code
-- Purpose: **benchmark** for our LLM pipeline
-:::
+### Why combine human and machine
 
-:::
+- 30,000 annotations: valuable but **insufficient** for a high-performing classifier
+- Manual annotation does not scale to 1.4 M observations
+- LLMs scale, but lack **domain context** out of the box
 
-For each item, an annotator can: **assign a code**, **delegate** to a peer, or mark as **uncodable**.
-
-::: {.notes}
-We launched two annotation campaigns. The first one was an audit of the existing system. We had ten thousand observations annotated blind in the current NACE 2.0 classification by six experts from the SIRENE Quality Office, with no auto-coding aid. The purpose was not to train a model but to verify that our legacy labels — the labels we will rely on as input to our LLM pipeline — were of sufficient quality. This is the gold standard.
-
-The second campaign is the one that matters most for what follows. We mobilised our entire network of about twenty-five APE business experts across France to annotate roughly thirty thousand observations directly in NACE 2.1. We focused on multivocal cases because that is where the difficulty is. To save time, the candidate codes were pre-filtered using the NACE 2.0 code already known. This produces our ground truth — the reference dataset against which we evaluate everything else.
-
-In both campaigns, annotators have three possible actions: assign a code, delegate the task to another annotator if they feel they lack expertise, or mark the description as uncodable if it is too vague. Interestingly, in both campaigns we observed roughly 6 percent of delegations and 6 percent of uncodable cases — a stable signal that we found valuable for calibrating expectations.
-:::
-
-## Reconciling expertise and innovation {#section_3_2 .backgroundStandard_vert}
-
-:::{.enteteAvecTitre}
-Human and Virtual Annotation
-:::
-
-::: {.columns}
-
-::: {.column width="55%"}
-- 30,000 annotations are **valuable but insufficient** for a high-performing classifier
-- Manual annotation **does not scale** to 1.4 million observations
-- LLMs can process volume, but **lack the domain context**
-- ➡️ Combine the two: **virtual annotators guided by expert knowledge**
-:::
-
-::: {.column width="45%"}
-**Hybrid principle**
-
-::: {style="text-align:center;"}
-🧑‍🏫 Expert<br>↓<br>📚 Codified knowledge<br>↓<br>🤖 LLM as virtual annotator<br>↓<br>📊 Volume + Quality
-:::
+**Hybrid principle.** Use language models as virtual annotators — guided by expert knowledge crystallised into structured prompts and reference materials.
 :::
 
 :::
 
 ::: {.notes}
-So we have two complementary resources. On one side, thirty thousand high-quality manual annotations in the new classification — too few to train a high-performing classifier from scratch, but very valuable as a benchmark. On the other side, the ten million labels accumulated over years of production in the old classification — a massive asset, but expressed in the wrong target space.
+We launched two annotation campaigns. The first was an audit of the existing system: ten thousand observations annotated blind in the current NACE 2.0 classification by six expert annotators, with no auto-coding aid. The purpose was not to train a model but to verify that our legacy labels were of sufficient quality to feed the LLM pipeline.
 
-The intuition we built on is the following. Human experts have something that no language model has natively: a deep, context-specific understanding of how the classification rules apply to noisy real-world descriptions. But experts cannot scale to a million observations. Language models can scale, but they need that expertise injected as context in order to make sound decisions.
+The second campaign matters most for what follows. We mobilised our network of about twenty-five business experts to annotate roughly thirty thousand observations directly in NACE 2.1. We focused on multivocal cases because that is where the difficulty lies. To save time, the candidate codes were pre-filtered using the NACE 2.0 code already known. This produces our ground truth — the reference dataset against which we evaluate everything else. In both campaigns, annotators have three possible actions: assign a code, delegate to another annotator if they lack expertise, or mark the description as uncodable. We observed roughly 6 percent of delegations and 6 percent of uncodable cases — a stable signal we found valuable for calibrating expectations.
 
-So the idea was to use language models as virtual annotators — to reproduce the expert workflow at scale, with the human expertise crystallised into structured prompts and reference materials.
+We have two complementary resources: thirty thousand high-quality manual annotations in the new classification — too few to train a high-performing classifier from scratch, but very valuable as a benchmark — and millions of labels accumulated over years of production in the old classification, expressed in the wrong target space. Human experts have a deep understanding of how the rules apply to noisy real-world descriptions; LLMs scale but need that expertise injected as context. The idea is to use language models as virtual annotators, reproducing the expert workflow at scale.
 :::
 
-# 4. Methodology {#chapters_4 .backgroundTitre_bleu}
+# 3. Methodology {#chapters_3 .backgroundTitre_bleu}
 
-## Recasting the task as constrained selection {#section_4_1 .backgroundStandard_bleu}
+## Recasting the task as constrained selection {#section_3_1 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
@@ -359,19 +212,19 @@ Methodology
 - The full label space (746 NACE 2.1 codes) is too large and unstable
 - For each observation, we already know the **NACE 2.0 code**
 - The correspondence table tells us the **set of admissible NACE 2.1 codes**
-- ➡️ The task becomes: **pick the right code from a short, restricted list**
+- The task becomes: **pick the right code from a short, restricted list**
 
 ::: {.fragment .fade-in}
-**Key benefit**: this dramatically reduces the search space and aligns the model with official classification guidelines.
+**Key benefit**: the search space drops from hundreds to a handful, the prompt stays manageable, and we remain aligned with official classification rules.
 :::
 
 ::: {.notes}
 The first methodological choice was to reframe the task. Instead of asking the language model to classify the activity description into one of 746 possible NACE 2.1 codes — which is hard, error-prone, and offers many opportunities for hallucination — we exploit a piece of information we already have: the existing NACE 2.0 code, which has been validated through years of production.
 
-For each observation, we use the correspondence table to retrieve the set of admissible NACE 2.1 codes — typically two to five candidates, occasionally more. The language model is then asked to pick the right one from this short list. This is a constrained selection problem rather than an open classification problem. The search space drops from hundreds to a handful, the prompt is more manageable, and we stay aligned with the official classification rules.
+For each observation, we use the correspondence table to retrieve the set of admissible NACE 2.1 codes — typically two to five candidates, occasionally more. The language model is then asked to pick the right one from this short list. This is a constrained selection problem rather than an open classification problem.
 :::
 
-## The pipeline {#section_4_2 .backgroundStandard_bleu}
+## The pipeline {#section_3_2 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
@@ -389,7 +242,7 @@ Methodology
 5. Ask the LLM to pick the most appropriate code
 6. Parse the structured JSON response
 
-This is a form of **Context-Augmented Generation (CAG)** with a manual retriever.
+A form of **Context-Augmented Generation (CAG)** with a deterministic retriever.
 :::
 
 ::: {.column width="40%"}
@@ -397,7 +250,7 @@ This is a form of **Context-Augmented Generation (CAG)** with a manual retriever
 
 | Element | Source |
 |---------|--------|
-| Activity text | SIRENE 4 |
+| Activity text | Production register |
 | NACE 2.0 code | Production model |
 | Candidate set | Correspondence table |
 | Explanatory notes | Official NACE 2.1 documentation |
@@ -406,14 +259,14 @@ This is a form of **Context-Augmented Generation (CAG)** with a manual retriever
 :::
 
 ::: {.notes}
-Here is the pipeline in more detail. For each observation, we assemble a prompt that contains four pieces of information: the free-text activity description as written by the entrepreneur, the legacy NACE 2.0 code from production, the list of candidate NACE 2.1 codes from the correspondence table, and — this is crucial — the explanatory notes from the official NACE 2.1 documentation for each candidate code.
+Here is the pipeline in more detail. For each observation we assemble a prompt with four pieces of information: the free-text activity description as written by the entrepreneur, the legacy NACE 2.0 code from production, the list of candidate NACE 2.1 codes from the correspondence table, and — crucially — the explanatory notes from the official NACE 2.1 documentation for each candidate code.
 
-This last element is what brings real expert knowledge into the prompt. Explanatory notes are the official prose definitions written by the classification authority, often containing inclusion and exclusion rules that allow you to disambiguate between two close candidates. By injecting them into the prompt, we give the language model the same reference material that a human expert would consult.
+This last element brings real expert knowledge into the prompt. Explanatory notes are the official prose definitions written by the classification authority, often containing inclusion and exclusion rules that allow you to disambiguate between two close candidates. By injecting them into the prompt, we give the language model the same reference material that a human expert would consult.
 
-We can describe this technically as a form of context-augmented generation. It is similar to retrieval-augmented generation, but the retriever is not a vector search — it is a deterministic lookup based on the legacy code and the official correspondence table. We will see later that we are also experimenting with a fully RAG-based variant.
+Technically this is a form of context-augmented generation. It is similar to retrieval-augmented generation, but the retriever is not a vector search — it is a deterministic lookup based on the legacy code and the official correspondence table. We are also experimenting with a fully RAG-based variant, discussed later.
 :::
 
-## The prompt structure {#section_4_3 .backgroundStandard_bleu}
+## The prompt structure {#section_3_3 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
@@ -453,16 +306,16 @@ Methodology
 :::
 
 ::: {.notes}
-The prompt itself has two parts. There is a system prompt — identical for every observation — that defines the role of the model as a NACE classification expert and gives the general instructions: analyse the description, pick the most appropriate code from the provided list, return null if you are not confident, and respond strictly in JSON.
+The prompt has two parts. A system prompt — identical for every observation — defines the role of the model as a NACE classification expert and gives the general instructions: analyse the description, pick the most appropriate code from the provided list, return null if not confident, respond strictly in JSON.
 
-Then there is a user prompt that is specific to each observation, containing the activity description, the legacy code, the candidate set with explanatory notes, and the required output schema.
+The user prompt is specific to each observation: the activity description, the legacy code, the candidate set with explanatory notes, and the required output schema.
 
-The output is a structured JSON with three fields. The codable field tells us whether the description was sufficient at all. The nace_2008_valid field is a useful side benefit: the model also flags when it suspects the legacy code itself was incorrect — which can happen and which is information we would not have obtained otherwise. And the nace2025 field is the actual recoding decision.
+The output is structured JSON with three fields. The codable field tells us whether the description was sufficient at all. The nace_2008_valid field is a useful side benefit: the model also flags when it suspects the legacy code itself was incorrect — information we would not have obtained otherwise. The nace2025 field is the actual recoding decision.
 
-Forcing the model into structured JSON output is essential for production. Language models tend to be verbose and chatty by default. Without an explicit format constraint, you get free-text answers that are very expensive to parse reliably and lead to errors at scale.
+Forcing the model into structured JSON output is essential for production. Language models tend to be verbose by default; without an explicit format constraint, you get free-text answers that are very expensive to parse reliably and lead to errors at scale.
 :::
 
-## Why context matters: an illustration {#section_4_4 .backgroundStandard_bleu}
+## Why context matters: an illustration {#section_3_4 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
@@ -493,12 +346,12 @@ Methodology
 :::
 
 ::: {.notes}
-Let me illustrate why context is so essential here. We tested the same activity description on a public model with just the system prompt — no candidate set, no explanatory notes. The model produces a code, but it produces a NACE 2.0 code. Why? Because NACE 2.0 has been around for fifteen years; it is in the training data of every commercial language model. NACE 2.1 was published only recently and is barely represented in any pre-training corpus. So without the explicit context, the model falls back on what it knows.
+We tested the same activity description on a public model with just the system prompt — no candidate set, no explanatory notes. The model produces a code, but it produces a NACE 2.0 code. NACE 2.0 has been around for fifteen years; it is in the training data of every commercial language model. NACE 2.1 was published recently and is barely represented in any pre-training corpus. So without explicit context, the model falls back on what it knows.
 
-When we add the candidate set and the explanatory notes, the model retrieves the correct NACE 2.1 code, respects the output format, and — importantly — the decision is traceable. We can see exactly which information the model had access to when making its choice. This is essential for an official statistical institute, where every methodological decision must be auditable.
+When we add the candidate set and the explanatory notes, the model retrieves the correct NACE 2.1 code, respects the output format, and the decision is traceable: we can see exactly which information the model had access to. This is essential for an official statistical institute, where every methodological decision must be auditable.
 :::
 
-## Multi-model annotation {#section_4_5 .backgroundStandard_bleu}
+## Multi-model annotation {#section_3_5 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
@@ -516,16 +369,16 @@ Methodology
 :::
 
 ::: {.notes}
-We did not rely on a single model. We queried four open-source language models in parallel — Qwen 2.5, Ministral, Mistral Small, and a quantised Llama 3.1 70B. They differ along several axes: size, inference speed, raw performance, and what we call restrictiveness — that is, how often they decline to answer when uncertain. Some are very cautious, some are quite permissive.
+We did not rely on a single model. Four open-source language models were queried in parallel — Qwen 2.5, Ministral, Mistral Small, and a quantised Llama 3.1 70B — differing along several axes: size, inference speed, raw performance, and restrictiveness — that is, how often they decline to answer when uncertain.
 
-Treating each model as an independent virtual annotator, we tested several aggregation strategies. A cascade approach where we trust one model first and fall back to others. A simple majority vote. A weighted vote where each model's contribution is weighted by its individual accuracy on the ground truth set.
+Treating each model as an independent virtual annotator, we tested several aggregation strategies: a cascade where one model is trusted first with fall-back to others; a simple majority vote; a weighted vote where each model's contribution is weighted by its individual accuracy on the ground truth set.
 
 The intuition behind aggregation is the same as in any ensemble method: complementary errors cancel out. A weak permissive model and a cautious strong model can together produce a more robust labelling than either alone. In our experiments, majority voting served as a strong baseline.
 :::
 
-# 5. Infrastructure {#chapters_5 .backgroundTitre_violet}
+# 4. Infrastructure {#chapters_4 .backgroundTitre_violet}
 
-## A fully open-source MLOps stack on the SSPCloud {#section_5_1 .backgroundStandard_violet}
+## A fully open-source MLOps stack on the SSPCloud {#section_4_1 .backgroundStandard_violet}
 
 :::{.enteteAvecTitre}
 Infrastructure
@@ -554,63 +407,59 @@ Infrastructure
 :::
 
 ::: {.notes}
-A few words about the infrastructure. We are big believers in open-source, and the entire pipeline runs on what we call the SSPCloud — Insee's internal data science platform, which is itself open-source and based on Kubernetes.
+The entire pipeline runs on the SSPCloud — Insee's internal data science platform, which is itself open-source and based on Kubernetes.
 
-For language model serving, we use vLLM, which is the de facto standard for high-throughput inference on open-source models. For prompt management, we use Langfuse — every prompt is versioned, every model run is traceable to a specific prompt version. For experiment tracking, MLflow — we log all hyperparameters, all evaluation metrics, the full lineage of every model. For orchestration, Argo Workflows, so the entire pipeline is reproducible end-to-end as a containerised workflow.
+For language model serving we use vLLM, the de facto standard for high-throughput inference on open-source models. For prompt management, Langfuse — every prompt is versioned, every model run is traceable to a specific prompt version. For experiment tracking, MLflow — we log all hyperparameters, all evaluation metrics, the full lineage of every model. For orchestration, Argo Workflows, so the entire pipeline is reproducible end-to-end as a containerised workflow.
 
-This stack is not exotic — many of you may already be using parts of it. The point I want to make is that for an official statistical institute, this kind of traceability is not optional. Every label produced by an LLM in our training set must be reproducible: we must be able to point to the exact prompt version, the exact model version, and the exact correspondence table version that produced it. Without that, we could not justify using LLM-generated labels in a production statistical pipeline.
+This stack is not exotic — many of you may already be using parts of it. The point is that for an official statistical institute, this kind of traceability is not optional. Every label produced by an LLM in our training set must be reproducible: we must be able to point to the exact prompt version, the exact model version, and the exact correspondence table version that produced it. Without that, we could not justify using LLM-generated labels in a production statistical pipeline.
 :::
 
-# 6. Results {#chapters_6 .backgroundTitre_jaune}
+# 5. Results {#chapters_5 .backgroundTitre_jaune}
 
-## Evaluation: how do you grade an LLM annotator? {#section_6_1 .backgroundStandard_jaune}
+## Evaluation and reconstructed corpus {#section_5_1 .backgroundStandard_jaune}
 
 :::{.enteteAvecTitre}
 Results
 :::
 
-- **Reference**: the ~30,000 manually annotated multivocal cases
+::: {.columns}
+
+::: {.column width="50%"}
+### How do you grade an LLM annotator?
+
+- Reference: the ~30,000 manually annotated multivocal cases
 - Three complementary metrics:
   1. **Overall accuracy** — across all observations
   2. **Accuracy on codable cases** — when the description is sufficient
   3. **LLM-only accuracy** — errors imputable to generation alone
 
-::: {.fragment .fade-in}
-**Insight**: a substantial share of disagreements are not LLM errors but ambiguous descriptions or even legacy-coding mistakes.
+A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes.
 :::
 
-::: {.notes}
-Evaluation is genuinely difficult here, and I want to be honest about it. Our reference is the thirty thousand manually annotated cases, which themselves contain some level of human disagreement and error.
+::: {.column width="50%"}
+### Reconstructing the training set
 
-We use three complementary metrics. Overall accuracy is the headline figure: how often does the LLM agree with the human ground truth on all observations. Accuracy on codable cases restricts to observations where the description was deemed sufficient by the experts — this isolates the genuine classification difficulty from the noise of unusable descriptions. And what we call LLM-only accuracy attempts to factor out errors that are not really errors of the model: cases where the description is genuinely ambiguous, or where the legacy NACE 2.0 code was itself wrong.
-
-This third metric is methodologically important because it tells us when the LLM is doing well at the task we actually asked it to do, as opposed to inheriting upstream noise. A naive evaluation can underestimate the model substantially.
-:::
-
-## Reconstructing the training set {#section_6_2 .backgroundStandard_jaune}
-
-:::{.enteteAvecTitre}
-Results
-:::
-
-- ~1.4 million multivocal observations relabelled via the LLM pipeline
-- Combined with the **1.3 million univocal** observations (table lookup)
-- ➡️ **~2 million observations** in NACE 2.1
-- Distribution across codes is **very close** to the original SIRENE 4 distribution
+- ~1.4 M multivocal observations relabelled via the LLM pipeline
+- Combined with **1.3 M univocal** observations (table lookup)
+- **~2 M** labels in NACE 2.1
+- Distribution across codes is **very close** to the original distribution
 
 ::: {.callout-tip}
-This is what we call **semi-synthetic data**: labels are generated algorithmically, but grounded in real observations and structured domain knowledge.
+This is **semi-synthetic** data: labels are generated algorithmically, but grounded in real observations and structured domain knowledge.
+:::
+:::
+
 :::
 
 ::: {.notes}
-Once we are satisfied with LLM performance on the benchmark, we apply the pipeline at scale. The 1.3 million univocal observations are recoded by simple table lookup — no model needed. The 1.4 million multivocal observations go through the LLM pipeline. We discard observations where no model was sufficiently confident. The result is a reconstructed training corpus of about two million observations in NACE 2.1.
+Evaluation is genuinely difficult here. Our reference is the thirty thousand manually annotated cases, which themselves contain some level of human disagreement and error. We use three complementary metrics. Overall accuracy is the headline figure: how often the LLM agrees with the human ground truth on all observations. Accuracy on codable cases restricts to observations where the description was deemed sufficient by experts — this isolates the genuine classification difficulty from the noise of unusable descriptions. LLM-only accuracy attempts to factor out errors that are not really errors of the model: cases where the description is genuinely ambiguous, or where the legacy NACE 2.0 code was itself wrong. This third metric is methodologically important because it tells us when the LLM is doing well at the task we actually asked it to do, as opposed to inheriting upstream noise. A naive evaluation can underestimate the model substantially.
 
-A point worth highlighting: the distribution of codes in this reconstructed corpus is very close to the original SIRENE 4 distribution. We do not introduce a major bias by going through the LLM. This is reassuring because it means the downstream classifier will see a representative sample of the actual flow of incoming filings.
+Once satisfied with LLM performance on the benchmark, we apply the pipeline at scale. The 1.3 million univocal observations are recoded by simple table lookup. The 1.4 million multivocal observations go through the LLM pipeline; we discard observations where no model was sufficiently confident. The result is a reconstructed training corpus of about two million observations in NACE 2.1. The distribution of codes in this corpus is very close to the original distribution, so the downstream classifier sees a representative sample of the actual incoming flow.
 
 I prefer the term semi-synthetic for this kind of data. It is not pure synthetic data — every observation corresponds to a real business with a real activity description. But the labels are produced algorithmically rather than by humans. The grounding in real observations and in structured official documentation is what makes us comfortable using these labels for production training.
 :::
 
-## Performance of the retrained classifier {#section_6_3 .backgroundStandard_jaune}
+## Performance of the retrained classifier {#section_5_2 .backgroundStandard_jaune}
 
 :::{.enteteAvecTitre}
 Results
@@ -618,119 +467,110 @@ Results
 
 - A **fastText**-style classifier (and a more recent transformer-based model) is trained on the reconstructed corpus
 - Standard ML practice: **train / validation / test** split, data editing, monitoring
-- ➡️ Overall accuracy of approximately **80 %** — comparable to the previous-generation NACE 2.0 model
+- Overall accuracy of approximately **80 %** — comparable to the previous-generation NACE 2.0 model
 
 ::: {.fragment .fade-in}
 [Take-away]{.bold}: semi-synthetic LLM-generated labels can substitute for manual annotations in the early stages of a classification transition.
 :::
 
 ::: {.notes}
-The decisive question, of course, is whether a classifier trained on these LLM-generated labels can match the performance of one trained on real human labels. We trained two variants — a fastText-style model in line with our current production system, and a more recent transformer-based architecture using a library called TorchTextClassifiers, developed in-house and presented separately by my colleague Meilame Tayebjee.
+The decisive question is whether a classifier trained on these LLM-generated labels can match the performance of one trained on real human labels. We trained two variants — a fastText-style model in line with our current production system, and a more recent transformer-based architecture using a library called TorchTextClassifiers, developed in-house and presented separately by my colleague Meilame Tayebjee.
 
-Following standard ML practice — train, validation, test splits, data editing on the reconstructed corpus, monitoring of distribution shifts — we obtain an overall accuracy of about 80 percent, which is comparable to what the previous-generation NACE 2.0 model achieves on its own task.
+Following standard ML practice — train, validation, test splits, data editing on the reconstructed corpus, monitoring of distribution shifts — we obtain an overall accuracy of about 80 percent, comparable to what the previous-generation NACE 2.0 model achieves on its own task.
 
-The take-away here is, I think, the most important point of the talk. Semi-synthetic labels generated by language models can effectively substitute for manually annotated data in the early stages of a classification transition. This was not obvious at the start of the project. The fact that we recover the same level of accuracy as a model trained on years of production-curated labels is a strong empirical signal that the approach is operationally viable.
+The take-away is the most important point of the talk. Semi-synthetic labels generated by language models can effectively substitute for manually annotated data in the early stages of a classification transition. Recovering the same level of accuracy as a model trained on years of production-curated labels is a strong empirical signal that the approach is operationally viable.
 :::
 
-# 7. An Alternative: Pure RAG {#chapters_7 .backgroundTitre_vert}
+# 6. An Alternative: Pure RAG {#chapters_6 .backgroundTitre_vert}
 
-## When no legacy labels exist {#section_7_1 .backgroundStandard_vert}
+## Pure RAG: when no legacy labels exist {#section_6_1 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
 An Alternative: Pure RAG
 :::
 
-The CAG pipeline assumes:
+::: {.columns}
+
+::: {.column width="50%"}
+**The CAG pipeline assumes**
 
 - a **legacy classification** with reliable labels
-- an **official correspondence table** to the new classification
+- an **official correspondence table**
 
-What if neither is available?
+**What if neither is available?**
 
-::: {.fragment .fade-in}
-- A **completely new classification** without predecessor
-- Use cases in **another country / institute** without an existing model
-- A different domain altogether (e.g., COICOP for households)
+- A completely new classification without predecessor
+- An institute without an existing model
+- A different domain (e.g., COICOP for households)
+:::
+
+::: {.column width="50%"}
+**Retrieval-Augmented Generation**
+
+1. Build a **vector database** of the explanatory notes of the new classification
+2. Embed the activity description
+3. Retrieve the **top-k most similar** NACE 2.1 codes
+4. Inject candidates and notes into the prompt
+5. Let the LLM pick
+
+**Tested in parallel on COICOP** (household survey): promising, but higher inference cost than CAG.
+:::
+
 :::
 
 ::: {.notes}
-The CAG approach I just described relies on two assumptions: that you have reliable legacy labels in an old classification, and that there is an official correspondence table to the new one. For NACE 2.1, both are available. But this is not always the case.
+The CAG approach relies on two assumptions: reliable legacy labels in an old classification, and an official correspondence table to the new one. For NACE 2.1 both are available. But this is not always the case. You may face a brand-new classification with no predecessor; you may be at an institute that does not yet have a production model in the old classification; you may be applying this approach to a different domain — for instance, COICOP coding of household consumption — where there is no equivalent legacy infrastructure. In all these cases, the legacy code is not there to constrain the candidate list, and CAG does not directly apply.
 
-You may be facing a brand-new classification with no predecessor. You may be at an institute that does not yet have a production model in the old classification. You may be applying this approach to a completely different domain — for instance, COICOP coding of household consumption — where there is no equivalent legacy infrastructure. In all these cases, the legacy code is not there to constrain the candidate list, and the CAG approach does not directly apply.
+The alternative is fully retrieval-augmented generation. The idea is to skip the legacy code entirely and rely directly on a vector database containing the descriptive notes of the new classification. For each observation we embed the activity description, retrieve the top-k most similar NACE 2.1 explanatory notes, inject those candidates into the prompt, and let the LLM pick.
+
+This has two important benefits. It does not depend on legacy labels, which themselves can contain human annotator errors that we would otherwise propagate. And it is much more flexible: it works in any setting where you have an authoritative classification with explanatory notes, even without a historical model. It also handles genuinely new activities — emerging sectors that did not exist in the old classification — more gracefully than a correspondence-table approach.
+
+We have been testing RAG in parallel on a different use case: the automatic coding of consumption items in a household survey, against the COICOP classification. Volumes there are much smaller, which makes it a comfortable testbed for an approach that is computationally heavier than CAG. Early results are encouraging. But there is a real trade-off: pure RAG requires embedding inference and vector search at every observation, significantly more expensive at scale than the CAG pipeline that relies on a deterministic correspondence table. For high-volume, real-time settings, CAG remains the preferred approach for now. For surveys and one-off recoding tasks, RAG is very attractive.
 :::
 
-## Retrieval-Augmented Generation {#section_7_2 .backgroundStandard_vert}
+# 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
 
-:::{.enteteAvecTitre}
-An Alternative: Pure RAG
-:::
-
-- Build a **vector database** of the explanatory notes of the new classification
-- For each observation:
-  1. Embed the activity description
-  2. Retrieve the **top-k most similar** NACE 2.1 codes
-  3. Inject these candidates and their notes into the prompt
-  4. Let the LLM pick
-
-::: {.fragment .fade-in}
-**Benefits**
-
-- No reliance on legacy labels (which may themselves contain errors)
-- More flexible: works when no historical labels exist
-- Natively handles **new** activities without precedent
-:::
-
-::: {.notes}
-The alternative we are exploring is fully retrieval-augmented generation. The idea is to skip the legacy code entirely and rely directly on a vector database containing the descriptive notes of the new classification.
-
-Concretely, for each observation, we embed the activity description, retrieve the top-k most similar NACE 2.1 explanatory notes from the vector store, inject those candidates into the prompt, and let the LLM pick the most appropriate one.
-
-This approach has two important benefits. First, it does not depend on legacy labels, which themselves can contain human annotator errors that we would otherwise propagate. Second, it is much more flexible: it works in any setting where you have an authoritative classification with explanatory notes, even if you have no historical model. It also handles genuinely new activities — emerging sectors that did not exist in the old classification — more gracefully than a correspondence-table approach.
-:::
-
-## A parallel use case: COICOP {#section_7_3 .backgroundStandard_vert}
-
-:::{.enteteAvecTitre}
-An Alternative: Pure RAG
-:::
-
-- Automatic coding of consumption items in a **household survey**
-- Smaller volumes than SIRENE
-- Suitable testbed for the RAG approach
-- Promising results, but **higher inference cost** than CAG
-- ➡️ Trade-off: flexibility vs. computational cost
-
-::: {.notes}
-We have been testing this RAG approach in parallel on a different use case: the automatic coding of consumption items in a household survey, against the COICOP classification. The volumes there are much smaller than SIRENE — a few hundred thousand items at most — which makes it a comfortable testbed for an approach that is computationally heavier than CAG.
-
-Early results are encouraging, and we expect this to become a complementary tool in our portfolio. But there is a real trade-off: pure RAG requires embedding inference and vector search at every observation, which is significantly more expensive at scale than the CAG pipeline that relies on a deterministic correspondence table. For SIRENE, with its millions of observations and real-time flow, CAG remains the preferred approach for now. For surveys and one-off recoding tasks, RAG is very attractive.
-:::
-
-# 8. Conclusion and Perspectives {#chapters_8 .backgroundTitre_bleu}
-
-## What we have shown {#section_8_1 .backgroundStandard_bleu}
+## Take-aways and broader perspective {#section_7_1 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Conclusion and Perspectives
 :::
 
-::: {.incremental}
-- A **practical methodology** to handle classification revisions in production ML
+::: {.columns}
+
+::: {.column width="55%"}
+**What we have shown**
+
+- A practical methodology to handle classification revisions in production ML
 - LLMs as **virtual annotators** can scale where humans cannot
 - Constrained selection + context-augmented generation = **traceable, auditable** decisions
 - Semi-synthetic labels reach **production-grade accuracy** (~80 %)
 - Fully open-source, reproducible MLOps stack
 :::
 
-::: {.notes}
-To summarise. We have shown that classification revisions, which are a structural challenge in production ML for official statistics, can be addressed pragmatically using large language models. The key methodological idea is to treat language models as virtual annotators — and to constrain them tightly using the correspondence table and the official explanatory notes, so that their decisions remain traceable and auditable.
+::: {.column width="45%"}
+**Why it matters for official statistics**
 
-The empirical result is that a classifier trained on the reconstructed semi-synthetic dataset reaches accuracy levels comparable to the previous-generation production model. This is sufficient evidence, in our view, to proceed with operational deployment.
+- Classification revisions are **inevitable** and **recurring**
+- Traditional bottleneck: wait for human annotations before retraining
+- LLM-assisted recoding **shortens this delay** dramatically
+- Better continuity of statistical outputs across revisions
+- Lower operational cost of nomenclature transitions
 
-Equally important is the choice of stack: everything we did is open-source, runs on Kubernetes, and is fully reproducible. We are not locked into any vendor, and the methodology can be transferred to any institute willing to invest in similar infrastructure.
+How can we use generative AI **responsibly** in official statistics? Reproducibility, traceability, open source, human oversight.
 :::
 
-## Limits and ongoing work {#section_8_2 .backgroundStandard_bleu}
+:::
+
+::: {.notes}
+To summarise. Classification revisions, a structural challenge in production ML for official statistics, can be addressed pragmatically using large language models. The key methodological idea is to treat language models as virtual annotators — and to constrain them tightly using the correspondence table and the official explanatory notes, so that their decisions remain traceable and auditable.
+
+The empirical result is that a classifier trained on the reconstructed semi-synthetic dataset reaches accuracy levels comparable to the previous-generation production model. This is sufficient evidence to proceed with operational deployment. Equally important is the choice of stack: everything we did is open-source, runs on Kubernetes, and is fully reproducible. We are not locked into any vendor, and the methodology can be transferred to any institute willing to invest in similar infrastructure.
+
+Stepping back: classification revisions are a recurring fact of life in official statistics. NACE has been revised every fifteen to twenty years, and we have analogous cycles for COICOP, ISCO, and CPA. The traditional bottleneck has been the time required to accumulate enough human-annotated data in the new classification before any ML system can be retrained — typically two to three years of operational delay. This work shows that LLMs can substantially shorten that delay, while preserving continuity and lowering the operational cost of the transition. Beyond our specific case, this is part of a broader question that all of us are facing: how do we use generative AI responsibly in official statistics? The answer here is that it is feasible, provided we maintain reproducibility, traceability, open-source tooling, and human oversight at every step.
+:::
+
+## Limits and ongoing work {#section_7_2 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Conclusion and Perspectives
@@ -740,50 +580,15 @@ Conclusion and Perspectives
 - **Drift in LLMs themselves** — model versions evolve quickly
 - **Quality of the legacy labels** — we inherit upstream errors
 - **Improving the RAG variant** — better embeddings, rerankers, hierarchy-aware retrieval
-- **Extending to other classifications** — COICOP, ISCO, CPA…
+- **Extending to other classifications** — COICOP, ISCO, …
 
 ::: {.notes}
-A few honest words on limits. Inference at scale is not free, even with open-source models. Two million queries across multiple models requires careful workflow management and infrastructure budget. The language model ecosystem itself drifts: every six months there is a new generation, and reproducibility requires us to pin specific versions carefully. We also inherit the errors of the legacy labels — the LLM cannot fix what was wrong upstream, although in some cases it does flag suspicious legacy codes.
+Inference at scale is not free, even with open-source models. Two million queries across multiple models requires careful workflow management and infrastructure budget. The language model ecosystem itself drifts: every six months there is a new generation, and reproducibility requires us to pin specific versions carefully. We also inherit the errors of the legacy labels — the LLM cannot fix what was wrong upstream, although in some cases it does flag suspicious legacy codes.
 
-On the methodological side, we are working on improving the RAG variant: better embeddings tailored to the classification domain, rerankers to refine the retrieved candidates, and exploiting the hierarchical structure of NACE — section, division, group, class, sub-class — to do tree-style retrieval rather than flat similarity search. And we are extending the approach to other classifications: COICOP for consumption, ISCO and PCS for occupations, CPA for products.
+On the methodological side we are working on improving the RAG variant: better embeddings tailored to the classification domain, rerankers to refine the retrieved candidates, and exploiting the hierarchical structure of NACE — section, division, group, class, sub-class — to do tree-style retrieval rather than flat similarity search. And we are extending the approach to other classifications: COICOP for consumption, ISCO and PCS for occupations, CPA for products.
 :::
 
-## Why this matters for official statistics {#section_8_3 .backgroundStandard_bleu}
-
-:::{.enteteAvecTitre}
-Conclusion and Perspectives
-:::
-
-::: {.columns}
-
-::: {.column width="55%"}
-- Classification revisions are **inevitable** and **recurring**
-- Traditional bottleneck: **wait for human annotations** before retraining
-- LLM-assisted recoding **shortens this delay** dramatically
-- ➡️ Better **continuity** of statistical outputs across revisions
-- ➡️ Lower **operational cost** of nomenclature transitions
-:::
-
-::: {.column width="45%"}
-**The broader question**
-
-How can we use generative AI **responsibly** in official statistics?
-
-- Reproducibility ✅
-- Traceability ✅
-- Open source ✅
-- Human oversight ✅
-:::
-
-:::
-
-::: {.notes}
-Stepping back to the bigger picture: classification revisions are a recurring fact of life in official statistics. NACE has been revised every fifteen to twenty years, and we have analogous cycles for COICOP, ISCO, and CPA. The traditional bottleneck has been the time required to accumulate enough human-annotated data in the new classification before any ML system can be retrained — typically two to three years of operational delay.
-
-What this work shows is that LLMs can substantially shorten that delay, while preserving continuity of statistical outputs and lowering the operational cost of the transition. Beyond our specific case, I see this as part of a broader question that all of us in this room are facing: how do we use generative AI responsibly in official statistics? Our answer is that it is feasible, provided we maintain reproducibility, traceability, open-source tooling, and human oversight at every step.
-:::
-
-## Acknowledgements {#section_8_4 .backgroundStandard_bleu .smaller}
+## Acknowledgements {#section_7_3 .backgroundStandard_bleu .smaller}
 
 :::{.enteteAvecTitre}
 Conclusion and Perspectives
@@ -802,26 +607,22 @@ Conclusion and Perspectives
 ::: {.column width="50%"}
 **Code and slides are open**
 
-- 📂 [github.com/InseeFrLab/codif-ape-nace-revision](https://github.com/InseeFrLab/codif-ape-nace-revision)
-- 📂 [github.com/InseeFrLab/codif-ape-prez](https://github.com/InseeFrLab/codif-ape-prez)
-- 📂 [github.com/InseeFrLab/codif-ape-graph-rag](https://github.com/InseeFrLab/codif-ape-graph-rag)
+- [github.com/InseeFrLab/codif-ape-nace-revision](https://github.com/InseeFrLab/codif-ape-nace-revision)
+- [github.com/InseeFrLab/codif-ape-prez](https://github.com/InseeFrLab/codif-ape-prez)
+- [github.com/InseeFrLab/codif-ape-graph-rag](https://github.com/InseeFrLab/codif-ape-graph-rag)
 
 :::
 
 :::
 
 ::: {.notes}
-None of this would have been possible without my colleagues across the institute. The two annotation campaigns mobilised the SIRENE Quality Office and our entire network of APE business experts in the regions. The methodology was developed jointly with the SSP Lab, our innovation lab. And the integration into the production pipeline involved the methodology and IT departments — what we call DNE — and our regional teams.
-
-All the code is open and available on the InseeFrLab GitHub organisation. The full presentation slides for the various stages of this project are also public. We very much believe in sharing this work with the broader official statistics community, because the problem we faced — classification revision under operational constraints — is one that every institute will encounter sooner or later.
+None of this would have been possible without my colleagues across the institute. The two annotation campaigns mobilised the SIRENE Quality Office and our network of business experts in the regions. The methodology was developed jointly with the SSP Lab, our innovation lab. The integration into the production pipeline involved the methodology and IT departments — DNE — and our regional teams. All the code is open and available on the InseeFrLab GitHub organisation.
 :::
 
-# References {#chapters_9 .backgroundTitre_violet}
-
-## Selected references {#section_9_1 .backgroundStandard_violet .smaller}
+## Selected references {#section_7_4 .backgroundStandard_bleu .smaller}
 
 :::{.enteteAvecTitre}
-References
+Conclusion and Perspectives
 :::
 
 - Lewis, P., Piktus, A., Petroni, F., et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. arXiv:2005.11401.
@@ -854,5 +655,5 @@ References
 ::::
 
 ::: {.notes}
-Thank you very much for your attention. I am happy to take questions, both on the methodology and on practical aspects of the implementation. I am also keen to hear from those of you who are facing similar transitions — NACE 2.1 in your own country, or other classification revisions — and to discuss how this approach could be adapted to your context.
+Thank you for your attention. I am happy to take questions, both on the methodology and on practical aspects of the implementation. I am also keen to hear from those of you who are facing similar transitions — NACE 2.1 in your own country, or other classification revisions — and to discuss how this approach could be adapted to your context.
 :::
