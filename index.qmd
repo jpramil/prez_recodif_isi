@@ -19,6 +19,7 @@ transition: slide
 
 embed-resources: false
 custom-toc: true
+lightbox: true
 
 editor:
   render-on-save: true
@@ -83,7 +84,7 @@ A recurring challenge for every statistical institute (NACE, COICOP, ISCO, …).
 ::: {.notes}
 Classification revisions are a recurring challenge in official statistics — every institute eventually faces them, whether for NACE, COICOP, ISCO, CPA, or others. They are structurally different from routine ML maintenance.
 
-In normal maintenance, what changes over time is the input distribution — data drift — and you address it by retraining on fresh manually labelled data. The target variable, the Y you are predicting, stays the same.
+In normal maintenance, what changes over time is the input distribution — data drift — and you address it by retraining on fresh manually labelled data. The target variable, the Y you are predicting, stays thse same.
 
 When a classification is revised, the situation is fundamentally different. The Y itself changes. The codes you trained on no longer exist, or their semantic content has shifted. Newly labelled data in the new nomenclature are unavailable or, at best, very limited — because human annotation in a brand-new classification is slow, expensive, and requires experts who are themselves still learning the new rules.
 
@@ -96,7 +97,7 @@ To make this concrete: at Insee we have a fastText classifier in production sinc
 The Problem
 :::
 
-![](img/schema_recodif_ape.png){fig-align="center"}
+![](img/schema_recodif_ape.png){fig-align="center" width=50%}
 
 ::: {.notes}
 Our goal si to use LLMs only once, off-line, to relabel our legacy NACE 2.0  
@@ -125,22 +126,14 @@ The Problem
 - Mostly splits at level 4, with a few merges and recompositions
 :::
 
-::: {.column width="50%"}
-**Univocal codes** (1-to-1) — 551 classes — direct mapping.
+::: {.column width="50%" style="margin-top: 3em;"}
+**Univocal** (1-to-1) — 551 classes — direct mapping.
+**Multivocal** (1-to-N) — 181 classes — up to **38** candidates.
 
-**Multivocal codes** (1-to-N) — 181 classes — one source code → up to **38** candidates.
-
-| | Multivocal | Univocal |
-|---|---|---|
-| Correspondence table | 25 % | 75 % |
-| Actual training set | **52 %** | 48 % |
-
-Roughly **1.4 M observations** that cannot be recoded by a table lookup.
+![](img/schema_ambiguous.png){fig-align="center" width=90%}
 :::
 
 :::
-
-[The problem cannot be solved by a deterministic mapping table alone.]{.bold}
 
 ::: {.notes}
 NACE Rev. 2.1 is being adopted progressively across European statistical institutes. At Insee, 2025 is a dual-coding year; 2026 is dedicated to quality improvement; in 2027 NACE 2.1 becomes the production standard while we maintain the old coding in parallel for continuity.
@@ -148,13 +141,45 @@ NACE Rev. 2.1 is being adopted progressively across European statistical institu
 The change is significant but not revolutionary. At the most detailed level — sub-classes — we go from 732 categories to 746. Most of the changes are splits at the class level, with a few merges and recompositions.
 
 The headline number hides the real complexity. The correspondence between NACE 2.0 and NACE 2.1 is not a bijection. Univocal codes are easy: 551 classes have a one-to-one mapping. The hard part is the 181 multivocal classes, where one old code maps to multiple new codes — sometimes two, sometimes three, but in extreme cases up to 38 candidate target codes for a single source code. The correspondence table alone cannot tell you which new code is right; you need to look at the actual activity description and apply expert judgement.
+:::
 
+## The scale of the problem {#section_1_3b .backgroundStandard_violet}
+
+:::{.enteteAvecTitre}
+The Problem
+:::
+
+::: {.columns style="margin-top: 1em;"}
+
+::: {.column width="55%"}
+| | Multivocal | Univocal |
+|---|---|---|
+| Correspondence table | 25 % | 75 % |
+| Actual training set | **52 %** | 48 % |
+:::
+
+::: {.column width="45%" style="text-align: center; padding-top: 0.5em;"}
+[~1.4 M]{style="font-size: 2.5em; font-weight: bold;"}
+
+observations that cannot be recoded by table lookup
+:::
+
+:::
+
+::: {.fragment .fade-in}
+[The problem cannot be solved by a deterministic mapping table alone.]{.bold}
+:::
+
+
+::: {.notes}
 We were initially hopeful that, even though some codes are multivocal in theory, they would be rare in practice. That hope was misplaced. About 25 percent of theoretical codes are multivocal, but once you weight by the actual distribution of observations in our training set, the figure jumps to 52 percent. In absolute numbers, this is roughly 1.4 million observations that cannot be automatically recoded by a simple table lookup — far too many for human experts to process in any reasonable timeframe.
 :::
 
+
+
 # 2. Human and Virtual Annotation {#chapters_2 .backgroundTitre_vert}
 
-## Annotation: human and virtual {#section_2_1 .backgroundStandard_vert}
+## Two annotation campaigns {#section_2_1 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
 Human and Virtual Annotation
@@ -163,43 +188,68 @@ Human and Virtual Annotation
 ::: {.columns}
 
 ::: {.column width="50%"}
-### Two annotation campaigns
+### 1. Quality audit — NACE 2.0
 
-**1. Gold standard in NACE 2.0**
-
-- ~10,000 annotations in the **current** classification
-- 6 expert annotators, blind annotation
-- Purpose: **validate** legacy label precision
-
-**2. Ground truth in NACE 2.1**
-
-- ~30,000 annotations on **multivocal cases**
-- ~25 business experts across France
-- Candidates pre-filtered using the NACE 2.0 code
-- Purpose: **benchmark** for the LLM pipeline
-
-For each item: assign a code, delegate, or mark as uncodable.
+- ~10,000 annotations
+- Current classification
+- **Purpose:** validate the production model, build monitoring tools
 :::
 
 ::: {.column width="50%"}
-### Why combine human and machine
+### 2. Ground truth — NACE 2.1
 
-- 30,000 annotations: valuable but **insufficient** for a high-performing classifier
-- Manual annotation does not scale to 1.4 M observations
-- LLMs scale, but lack **domain context** out of the box
-
-**Hybrid principle.** Use language models as virtual annotators — guided by expert knowledge crystallised into structured prompts and reference materials.
+- ~30,000 annotations
+- ~25 business experts
+- Multivocal cases only
+- Candidates pre-filtered via NACE 2.0 code
+- **Purpose:** reference for the LLM pipeline
 :::
 
 :::
 
 ::: {.notes}
-We launched two annotation campaigns. The first was an audit of the existing system: ten thousand observations annotated blind in the current NACE 2.0 classification by six expert annotators, with no auto-coding aid. The purpose was not to train a model but to verify that our legacy labels were of sufficient quality to feed the LLM pipeline.
+We ran two annotation campaigns with very different purposes.
 
-The second campaign matters most for what follows. We mobilised our network of about twenty-five business experts to annotate roughly thirty thousand observations directly in NACE 2.1. We focused on multivocal cases because that is where the difficulty lies. To save time, the candidate codes were pre-filtered using the NACE 2.0 code already known. This produces our ground truth — the reference dataset against which we evaluate everything else. In both campaigns, annotators have three possible actions: assign a code, delegate to another annotator if they lack expertise, or mark the description as uncodable. We observed roughly 6 percent of delegations and 6 percent of uncodable cases — a stable signal we found valuable for calibrating expectations.
+The first was a quality audit of the current production system. About ten thousand observations annotated in the existing NACE 2.0 classification. It was not about training anything — the goal was to confirm legacy labels were of sufficient quality, and to develop the monitoring dashboards we will reuse once the new model is live.
 
-We have two complementary resources: thirty thousand high-quality manual annotations in the new classification — too few to train a high-performing classifier from scratch, but very valuable as a benchmark — and millions of labels accumulated over years of production in the old classification, expressed in the wrong target space. Human experts have a deep understanding of how the rules apply to noisy real-world descriptions; LLMs scale but need that expertise injected as context. The idea is to use language models as virtual annotators, reproducing the expert workflow at scale.
+The second campaign is the one that matters for the rest of the talk. We mobilised our network of about twenty-five business experts to annotate roughly thirty thousand observations directly in NACE 2.1, focusing on multivocal cases because that is where the real difficulty lies. To keep the task manageable, candidate codes were pre-filtered using the legacy NACE 2.0 code already known. For each item, annotators could assign a code, delegate to a colleague, or mark the case as uncodable. This second campaign gives us the ground truth — the only reference dataset we have in the new classification — and it is what we will use to evaluate everything that comes next.
 :::
+
+## What the ground truth tells us {#section_2_2 .backgroundStandard_vert}
+
+:::{.enteteAvecTitre}
+Human and Virtual Annotation
+:::
+
+::: {.columns}
+
+::: {.column width="50%"}
+### A realistic baseline
+
+- Strict 3-way agreement: **~62%**
+- Majority agreement: **~96%**
+
+Perfect alignment is not the target.
+:::
+
+::: {.column width="50%"}
+### An explicit expert workflow
+
+Label → legacy code → suggestions → correspondence table → explanatory notes → decide or mark uncodable.
+
+Reproducible at scale by an LLM.
+:::
+
+:::
+
+::: {.notes}
+Two takeaways from this ground truth.
+
+First, a realistic baseline. We ran a controlled exercise where three volunteers independently re-annotated the same subset of items, blind. Strict three-way agreement was only around 62%, but majority agreement — at least two out of three converging — reached 96%. The lesson is clear: even trained experts disagree on roughly four cases out of ten when you require unanimity. So expecting a model to align perfectly with the ground truth is neither realistic nor desirable. What we want is alignment within the range of natural human variability — that is our target.
+
+Second, the campaign made the expert reasoning explicit. Experts look at the label, check whether the legacy code or one of the suggested new codes is correct, decide whether the choice is obvious, and otherwise consult the correspondence table and the explanatory notes before assigning a code or marking the case as uncodable. This is a sequence we can describe precisely — and precisely because we can describe it, we can encode it into an LLM's system prompt and into the context we feed the model. The expert workflow becomes a protocol that a machine can follow at scale. That is exactly what the next section is about: using LLMs as virtual annotators to recode the full training base into NACE 2.1.
+:::
+
 
 # 3. Methodology {#chapters_3 .backgroundTitre_bleu}
 
