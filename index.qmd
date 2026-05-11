@@ -424,40 +424,40 @@ The intuition behind aggregation is the same as in any ensemble method: compleme
 
 # 4. Infrastructure {#chapters_4 .backgroundTitre_violet}
 
-## A fully open-source MLOps stack on the SSPCloud {#section_4_1 .backgroundStandard_violet}
+## Our MLOps stack on the SSPCloud {#section_4_1 .backgroundStandard_violet}
 
 :::{.enteteAvecTitre}
 Infrastructure
 :::
 
-::: {.columns}
+**SSPCloud** — Insee's cloud-based data science platform, built on the open-source **Onyxia** — runs our full stack as **one-click managed services** in every project:
 
-::: {.column width="50%"}
-- **SSPCloud**: Insee's cloud-based data science platform
-- Entirely **open-source** stack
-- Reproducible, auditable, scalable
+- **Kubernetes** — substrate; every component is a containerised workload
+- **llm.lab** — SSPCloud's LLM gateway, powered by **OpenWebUI + vLLM**
+- **Langfuse** — prompt versioning; every call logged
+- **MLflow** — experiment tracking for the downstream classifier
+- **Argo Workflows** — the end-to-end pipeline as a reproducible DAG
+- **MinIO** — S3-compatible storage for datasets and model artefacts
+
+::: {style="text-align: center; margin-top: 1em;"}
+![](img/logos/onyxia.svg){height=50px style="margin: 0 0.6em;"}
+![](img/logos/kubernetes.svg){height=50px style="margin: 0 0.6em;"}
+![](img/logos/openwebui.png){height=50px style="margin: 0 0.6em;"}
+![](img/logos/vllm.png){height=50px style="margin: 0 0.6em;"}
+![](img/logos/langfuse.png){height=50px style="margin: 0 0.6em;"}
+![](img/logos/mlflow.svg){height=50px style="margin: 0 0.6em;"}
+![](img/logos/argo.svg){height=50px style="margin: 0 0.6em;"}
+![](img/logos/minio.svg){height=50px style="margin: 0 0.6em;"}
 :::
 
-::: {.column width="50%"}
-
-| Component | Tool |
-|-----------|------|
-| LLM serving | **vLLM** |
-| Prompt management | **Langfuse** |
-| Experiment tracking | **MLflow** |
-| Workflow orchestration | **Argo Workflows** |
-| Containers | **Kubernetes** |
-
-:::
-
-:::
+[Entirely open-source, containerised, auditable, reproducible.]{.bold}
 
 ::: {.notes}
-The entire pipeline runs on the SSPCloud — Insee's internal data science platform, which is itself open-source and based on Kubernetes.
+Our pipeline runs entirely on the SSPCloud, Insee's data science platform — itself built on the open-source Onyxia layer above Kubernetes. The key point is operational: SSPCloud makes our full stack available as one-click managed services, so a data scientist does not need to deploy or maintain any of these tools individually.
 
-For language model serving we use vLLM, the de facto standard for high-throughput inference on open-source models. For prompt management, Langfuse — every prompt is versioned, every model run is traceable to a specific prompt version. For experiment tracking, MLflow — we log all hyperparameters, all evaluation metrics, the full lineage of every model. For orchestration, Argo Workflows, so the entire pipeline is reproducible end-to-end as a containerised workflow.
+The stack is exclusively open-source. Kubernetes is the substrate. For LLM inference, we do not call vLLM directly — we call llm.lab, SSPCloud's internal LLM gateway, which recently migrated to a combination of OpenWebUI and vLLM under the hood. Langfuse versions every prompt template and logs every model call with inputs, outputs and latency. MLflow tracks the downstream classifier training — hyperparameters, metrics, full lineage. Argo Workflows orchestrates the pipeline as a containerised DAG, reproducible from one button. MinIO provides shared S3 storage across all services.
 
-This stack is not exotic — many of you may already be using parts of it. The point is that for an official statistical institute, this kind of traceability is not optional. Every label produced by an LLM in our training set must be reproducible: we must be able to point to the exact prompt version, the exact model version, and the exact correspondence table version that produced it. Without that, we could not justify using LLM-generated labels in a production statistical pipeline.
+For an official statistical institute, this kind of traceability is not optional. Every label produced by an LLM in our training set must be reproducible: we must be able to point to the exact prompt version, the exact model version, and the exact correspondence table version that produced it.
 :::
 
 # 5. Results {#chapters_5 .backgroundTitre_jaune}
