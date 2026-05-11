@@ -1,6 +1,6 @@
 ---
 title: "When Classifications Change but Deadlines Don’t: Scaling Recoding with LLMs"
-subtitle: "The NACE Rev. 2 → Rev. 2.1 Transition at Insee"
+subtitle: "The NACE Transition at Insee"
 author:
   - name: "Julien PRAMIL"
     email: "julien.pramil@insee.fr"
@@ -9,7 +9,7 @@ author:
         department: "Directorate of statistical methodology"
 date: "04/06/2026"
 description: |
-  International Conference on Public Statistics — Recoding administrative data with LLMs
+  ISI regional conference - Malta
 
 slide-tone: false
 chalkboard: false
@@ -35,7 +35,7 @@ Introduction
 
 1. **The problem** — A model whose target variable is changing
 2. **Human and virtual annotation** — Combining expert and machine knowledge
-3. **Methodology** — A constrained, context-augmented LLM pipeline
+3. **Methodology** — A constrained LLM pipeline with Rule-Based Augmented Generation
 4. **Infrastructure** — Open-source MLOps on the SSPCloud
 5. **Results** — Performance of the retrained classifier
 6. **An alternative: pure RAG** — When no legacy labels exist
@@ -253,25 +253,34 @@ Second, the campaign made the expert reasoning explicit. Experts look at the lab
 
 # 3. Methodology {#chapters_3 .backgroundTitre_bleu}
 
-## Recasting the task as constrained selection {#section_3_1 .backgroundStandard_bleu}
+## Rule-Based Augmented Generation as constrained selection {#section_3_1 .backgroundStandard_bleu}
 
 :::{.enteteAvecTitre}
 Methodology
 :::
 
-- The full label space (746 NACE 2.1 codes) is too large and unstable
+**Why not ask the LLM directly?**
+
+- NACE 2.1 is too recent — barely in any pre-training corpus
+- Without context, the model falls back on **NACE 2.0**
+- Even with a known classification: **746 codes** is too large a space for reliable open generation
+
+**Constrained selection instead:**
+
 - For each observation, we already know the **NACE 2.0 code**
-- The correspondence table tells us the **set of admissible NACE 2.1 codes**
+- The correspondence table gives the **set of admissible NACE 2.1 codes**
 - The task becomes: **pick the right code from a short, restricted list**
 
 ::: {.fragment .fade-in}
-**Key benefit**: the search space drops from hundreds to a handful, the prompt stays manageable, and we remain aligned with official classification rules.
+[Without context, the model hallucinates. With context, it disambiguates.]{.bold .bleu_insee}
 :::
 
 ::: {.notes}
 The first methodological choice was to reframe the task. Instead of asking the language model to classify the activity description into one of 746 possible NACE 2.1 codes — which is hard, error-prone, and offers many opportunities for hallucination — we exploit a piece of information we already have: the existing NACE 2.0 code, which has been validated through years of production.
 
-For each observation, we use the correspondence table to retrieve the set of admissible NACE 2.1 codes — typically two to five candidates, occasionally more. The language model is then asked to pick the right one from this short list. This is a constrained selection problem rather than an open classification problem.
+We tested direct prompting first. The model returns a code — but a NACE 2.0 code. NACE 2.0 has been around for fifteen years and is well represented in every pre-training corpus. NACE 2.1 was published recently and is barely present. Without explicit context, the model falls back on what it knows. And even setting aside the recency issue, asking a language model to pick reliably from 746 possible codes in a single open-ended generation is a difficult task: the output space is too large, errors are hard to control, and there is no guarantee the model respects the official code boundaries.
+
+For each observation, we instead use the correspondence table to retrieve the set of admissible NACE 2.1 codes — typically two to five candidates. The language model is then asked to pick the right one from this short list. This is a constrained selection problem rather than an open classification problem. The search space drops from hundreds to a handful, the prompt stays manageable, and every decision remains aligned with official classification rules.
 :::
 
 ## The pipeline {#section_3_2 .backgroundStandard_bleu}
@@ -292,16 +301,18 @@ Methodology
 5. Ask the LLM to pick the most appropriate code
 6. Parse the structured JSON response
 
-A form of **Context-Augmented Generation (CAG)** with a deterministic retriever.
+A form of **Rule-Based Augmented Generation (RBAG)** with a deterministic retriever.
 :::
 
 ::: {.column width="40%"}
+<br>
+
 **Inputs to the prompt**
 
 | Element | Source |
 |---------|--------|
 | Activity text | Production register |
-| NACE 2.0 code | Production model |
+| NACE 2.0 code | Insee NACE Experts |
 | Candidate set | Correspondence table |
 | Explanatory notes | Official NACE 2.1 documentation |
 :::
@@ -313,7 +324,7 @@ Here is the pipeline in more detail. For each observation we assemble a prompt w
 
 This last element brings real expert knowledge into the prompt. Explanatory notes are the official prose definitions written by the classification authority, often containing inclusion and exclusion rules that allow you to disambiguate between two close candidates. By injecting them into the prompt, we give the language model the same reference material that a human expert would consult.
 
-Technically this is a form of context-augmented generation. It is similar to retrieval-augmented generation, but the retriever is not a vector search — it is a deterministic lookup based on the legacy code and the official correspondence table. We are also experimenting with a fully RAG-based variant, discussed later.
+Technically this is a form of RBAG. It is similar to retrieval-augmented generation, but the retriever is not a vector search — it is a deterministic lookup based on the legacy code and the official correspondence table. We are also experimenting with a fully RAG-based variant, discussed later.
 :::
 
 ## The prompt structure {#section_3_3 .backgroundStandard_bleu}
@@ -331,10 +342,16 @@ Methodology
 
 **User prompt** — observation-specific
 
-- Activity description
-- Legacy NACE 2.0 code
-- Candidate codes + explanatory notes
-- Required output schema
+```
+# Main activity : {{activity}}
+# NACE 2.0 code : {{nace_old}}
+# Candidate NACE 2.1 codes + notes : {{proposed_codes}}
+========
+# Instructions (7 rules)
+  → candidate list only — no external code
+  → first activity only
+  → strict JSON — no explanation
+```
 :::
 
 ::: {.column width="45%"}
@@ -343,63 +360,43 @@ Methodology
 ```json
 {
   "codable": true,
-  "nace_2008_valid": true,
-  "nace2025": "0147J"
+  "nace2025": "0147J",
+  "nace08_valid": true,
+  "confidence": 0.92
 }
 ```
 
 - `codable`: was the description sufficient?
-- `nace_2008_valid`: is the legacy code consistent with the description?
+- `nace08_valid`: is the legacy code consistent?
 - `nace2025`: the chosen code (or `null`)
+- `confidence`: model self-assessment (0–1)
 :::
 
+:::
+
+::: {.smaller style="margin-top: 0.5em;"}
+**`{{proposed_codes}}`** — example:
+
+```
+86.95: Physiotherapy activities
+  Includes: physiotherapy, medical massage, occupational therapy, praxitherapy…
+  Does not include: osteopaths, chiropractors, non-medical massage parlors…
+
+86.96: Traditional, complementary, and alternative medicine  [...]
+86.99: Other human health activities n.e.c.  [...]
+```
 :::
 
 ::: {.notes}
 The prompt has two parts. A system prompt — identical for every observation — defines the role of the model as a NACE classification expert and gives the general instructions: analyse the description, pick the most appropriate code from the provided list, return null if not confident, respond strictly in JSON.
 
-The user prompt is specific to each observation: the activity description, the legacy code, the candidate set with explanatory notes, and the required output schema.
+The user prompt is specific to each observation: the free-text activity description, the legacy NACE 2.0 code, and the list of candidate NACE 2.1 codes with their official explanatory notes. Seven explicit rules constrain the model: use only the provided candidate list, consider only the first activity if several are mentioned, and return a strict JSON object with no explanation.
 
-The output is structured JSON with three fields. The codable field tells us whether the description was sufficient at all. The nace_2008_valid field is a useful side benefit: the model also flags when it suspects the legacy code itself was incorrect — information we would not have obtained otherwise. The nace2025 field is the actual recoding decision.
+The output schema has four fields. The codable field tells us whether the description was sufficient at all. The nace08_valid field is a useful side benefit: the model also flags when it suspects the legacy code itself was incorrect — information we would not have obtained otherwise. The nace2025 field is the actual recoding decision. The confidence field captures the model's self-assessed certainty, which we use downstream to filter low-confidence predictions before aggregation.
 
 Forcing the model into structured JSON output is essential for production. Language models tend to be verbose by default; without an explicit format constraint, you get free-text answers that are very expensive to parse reliably and lead to errors at scale.
 :::
 
-## Why context matters: an illustration {#section_3_4 .backgroundStandard_bleu}
-
-:::{.enteteAvecTitre}
-Methodology
-:::
-
-::: {.columns}
-
-::: {.column width="50%"}
-**Without context** (system prompt only)
-
-- The model returns a code, but in the **old** NACE 2.0
-- It "knows" the old classification from training data
-- It does **not** know NACE 2.1 — too recent
-:::
-
-::: {.column width="50%"}
-**With context** (candidate set + notes)
-
-- The model retrieves the right code in **NACE 2.1**
-- The output respects the JSON schema
-- The decision is **traceable** to the explanatory notes
-:::
-
-:::
-
-::: {.fragment .fade-in}
-[Without context, the model hallucinates. With context, it disambiguates.]{.bold .bleu_insee}
-:::
-
-::: {.notes}
-We tested the same activity description on a public model with just the system prompt — no candidate set, no explanatory notes. The model produces a code, but it produces a NACE 2.0 code. NACE 2.0 has been around for fifteen years; it is in the training data of every commercial language model. NACE 2.1 was published recently and is barely represented in any pre-training corpus. So without explicit context, the model falls back on what it knows.
-
-When we add the candidate set and the explanatory notes, the model retrieves the correct NACE 2.1 code, respects the output format, and the decision is traceable: we can see exactly which information the model had access to. This is essential for an official statistical institute, where every methodological decision must be auditable.
-:::
 
 ## Multi-model annotation {#section_3_5 .backgroundStandard_bleu}
 
@@ -414,9 +411,8 @@ Methodology
 | Mistral Small | 24B | Slow | Strong | Moderately restrictive |
 | Llama 3.1 | 70B (quantised) | Very slow | Very strong | Moderately restrictive |
 
-::: {.fragment .fade-in}
 **Aggregation strategies**: cascade · majority vote · weighted vote
-:::
+
 
 ::: {.notes}
 We did not rely on a single model. Four open-source language models were queried in parallel — Qwen 2.5, Ministral, Mistral Small, and a quantised Llama 3.1 70B — differing along several axes: size, inference speed, raw performance, and restrictiveness — that is, how often they decline to answer when uncertain.
@@ -542,7 +538,7 @@ An Alternative: Pure RAG
 ::: {.columns}
 
 ::: {.column width="50%"}
-**The CAG pipeline assumes**
+**The RBAG pipeline assumes**
 
 - a **legacy classification** with reliable labels
 - an **official correspondence table**
@@ -563,19 +559,19 @@ An Alternative: Pure RAG
 4. Inject candidates and notes into the prompt
 5. Let the LLM pick
 
-**Tested in parallel on COICOP** (household survey): promising, but higher inference cost than CAG.
+**Tested in parallel on COICOP** (household survey): promising, but higher inference cost than RBAG.
 :::
 
 :::
 
 ::: {.notes}
-The CAG approach relies on two assumptions: reliable legacy labels in an old classification, and an official correspondence table to the new one. For NACE 2.1 both are available. But this is not always the case. You may face a brand-new classification with no predecessor; you may be at an institute that does not yet have a production model in the old classification; you may be applying this approach to a different domain — for instance, COICOP coding of household consumption — where there is no equivalent legacy infrastructure. In all these cases, the legacy code is not there to constrain the candidate list, and CAG does not directly apply.
+The RBAG approach relies on two assumptions: reliable legacy labels in an old classification, and an official correspondence table to the new one. For NACE 2.1 both are available. But this is not always the case. You may face a brand-new classification with no predecessor; you may be at an institute that does not yet have a production model in the old classification; you may be applying this approach to a different domain — for instance, COICOP coding of household consumption — where there is no equivalent legacy infrastructure. In all these cases, the legacy code is not there to constrain the candidate list, and RBAG does not directly apply.
 
 The alternative is fully retrieval-augmented generation. The idea is to skip the legacy code entirely and rely directly on a vector database containing the descriptive notes of the new classification. For each observation we embed the activity description, retrieve the top-k most similar NACE 2.1 explanatory notes, inject those candidates into the prompt, and let the LLM pick.
 
 This has two important benefits. It does not depend on legacy labels, which themselves can contain human annotator errors that we would otherwise propagate. And it is much more flexible: it works in any setting where you have an authoritative classification with explanatory notes, even without a historical model. It also handles genuinely new activities — emerging sectors that did not exist in the old classification — more gracefully than a correspondence-table approach.
 
-We have been testing RAG in parallel on a different use case: the automatic coding of consumption items in a household survey, against the COICOP classification. Volumes there are much smaller, which makes it a comfortable testbed for an approach that is computationally heavier than CAG. Early results are encouraging. But there is a real trade-off: pure RAG requires embedding inference and vector search at every observation, significantly more expensive at scale than the CAG pipeline that relies on a deterministic correspondence table. For high-volume, real-time settings, CAG remains the preferred approach for now. For surveys and one-off recoding tasks, RAG is very attractive.
+We have been testing RAG in parallel on a different use case: the automatic coding of consumption items in a household survey, against the COICOP classification. Volumes there are much smaller, which makes it a comfortable testbed for an approach that is computationally heavier than RBAG. Early results are encouraging. But there is a real trade-off: pure RAG requires embedding inference and vector search at every observation, significantly more expensive at scale than the RBAG pipeline that relies on a deterministic correspondence table. For high-volume, real-time settings, RBAG remains the preferred approach for now. For surveys and one-off recoding tasks, RAG is very attractive.
 :::
 
 # 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
@@ -593,7 +589,7 @@ Conclusion and Perspectives
 
 - A practical methodology to handle classification revisions in production ML
 - LLMs as **virtual annotators** can scale where humans cannot
-- Constrained selection + context-augmented generation = **traceable, auditable** decisions
+- Constrained selection + RBAG = **traceable, auditable** decisions
 - Semi-synthetic labels reach **production-grade accuracy** (~80 %)
 - Fully open-source, reproducible MLOps stack
 :::
