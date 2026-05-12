@@ -17,7 +17,7 @@ jump-to-slide: true
 mouse-wheel: false
 transition: slide
 
-embed-resources: false
+embed-resources: true
 custom-toc: true
 lightbox: true
 
@@ -529,7 +529,7 @@ The take-away is the most important point of the talk. Semi-synthetic labels gen
 
 # 6. An Alternative: Pure RAG {#chapters_6 .backgroundTitre_vert}
 
-## Pure RAG: when no legacy labels exist {#section_6_1 .backgroundStandard_vert}
+## Why try a pure RAG approach? {#section_6_1 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
 An Alternative: Pure RAG
@@ -538,40 +538,89 @@ An Alternative: Pure RAG
 ::: {.columns}
 
 ::: {.column width="50%"}
-**The RBAG pipeline assumes**
+**Limitations of RBAG**
 
-- a **legacy classification** with reliable labels
-- an **official correspondence table**
-
-**What if neither is available?**
-
-- A completely new classification without predecessor
-- An institute without an existing model
-- A different domain (e.g., COICOP for households)
+- Relies on **legacy NACE 2.0 labels** → any annotation error in the old system is **propagated** into the new corpus
+- Requires an **official correspondence table** — not always available
+- Tied to the specific case of a **revision** of an existing classification
 :::
 
 ::: {.column width="50%"}
-**Retrieval-Augmented Generation**
+**What RAG brings**
 
-1. Build a **vector database** of the explanatory notes of the new classification
-2. Embed the activity description
-3. Retrieve the **top-k most similar** NACE 2.1 codes
-4. Inject candidates and notes into the prompt
-5. Let the LLM pick
-
-**Tested in parallel on COICOP** (household survey): promising, but higher inference cost than RBAG.
+- **No propagation** of legacy labelling errors
+- Works **when no historical labels exist** — new classifications, new domains, brand-new use cases
+- A **more general** pipeline for any automatic coding task
+- Gives us an **empirical benchmark**: how does RAG compare to RBAG in accuracy?
 :::
 
 :::
+
+[Even where RBAG works, RAG is worth mastering — and quantifying.]{.bold}
 
 ::: {.notes}
-The RBAG approach relies on two assumptions: reliable legacy labels in an old classification, and an official correspondence table to the new one. For NACE 2.1 both are available. But this is not always the case. You may face a brand-new classification with no predecessor; you may be at an institute that does not yet have a production model in the old classification; you may be applying this approach to a different domain — for instance, COICOP coding of household consumption — where there is no equivalent legacy infrastructure. In all these cases, the legacy code is not there to constrain the candidate list, and RBAG does not directly apply.
+The RBAG approach we just described works well for the NACE 2.0 → 2.1 transition, but it has structural limitations worth pointing out.
 
-The alternative is fully retrieval-augmented generation. The idea is to skip the legacy code entirely and rely directly on a vector database containing the descriptive notes of the new classification. For each observation we embed the activity description, retrieve the top-k most similar NACE 2.1 explanatory notes, inject those candidates into the prompt, and let the LLM pick.
+First, it consumes legacy NACE 2.0 labels as ground truth. If the original coding contained errors — and any large administrative dataset does — those errors propagate into the relabelled corpus. The LLM does not fix them; it merely shifts them into the new classification space.
 
-This has two important benefits. It does not depend on legacy labels, which themselves can contain human annotator errors that we would otherwise propagate. And it is much more flexible: it works in any setting where you have an authoritative classification with explanatory notes, even without a historical model. It also handles genuinely new activities — emerging sectors that did not exist in the old classification — more gracefully than a correspondence-table approach.
+Second, the pipeline assumes an official correspondence table exists between the old and the new classification. That assumption is specific to the "revision of an existing classification" case. It does not hold for brand-new classifications, for institutes that do not yet have a production model in the old space, or for domains like COICOP where the legacy infrastructure looks different.
 
-We have been testing RAG in parallel on a different use case: the automatic coding of consumption items in a household survey, against the COICOP classification. Volumes there are much smaller, which makes it a comfortable testbed for an approach that is computationally heavier than RBAG. Early results are encouraging. But there is a real trade-off: pure RAG requires embedding inference and vector search at every observation, significantly more expensive at scale than the RBAG pipeline that relies on a deterministic correspondence table. For high-volume, real-time settings, RBAG remains the preferred approach for now. For surveys and one-off recoding tasks, RAG is very attractive.
+Third, even when RBAG is applicable, pure RAG is a useful pipeline to master. It is more general — it applies to any classification with explanatory notes. And we want to know empirically how it compares: is the precision of RAG within a few percentage points of RBAG, or is the gap much larger? The answer determines whether RAG is a viable fallback or a clearly inferior option for cases like ours.
+:::
+
+## What a RAG pipeline looks like {#section_6_2 .backgroundStandard_vert}
+
+:::{.enteteAvecTitre}
+An Alternative: Pure RAG
+:::
+
+![](img/rag_pipeline.png){fig-align="center" width=70%}
+
+::: {.notes}
+The RAG pipeline replaces the deterministic retriever of RBAG with a semantic one based on vector similarity.
+
+Step one is offline: we build a vector database of the explanatory notes of the new classification. Each NACE 2.1 code's description, inclusion rules and exclusion rules is embedded with a sentence encoder and stored in a vector store such as Qdrant or Chroma.
+
+Step two, at inference time: for each business description, we compute its embedding with the same encoder and run a similarity search against the database. The top-k most similar NACE 2.1 codes — typically k = 5 to 10 — come back as candidates, together with their explanatory notes.
+
+Step three is the LLM call. We inject the activity description, the retrieved candidates and their notes into a prompt very similar to the RBAG prompt. The LLM picks the most appropriate code and returns a structured JSON response.
+
+Compared to RBAG, the retrieval step is more flexible — we no longer depend on the legacy code. The real trade-off is not speed but **operational complexity**: RAG requires mastering several additional technical building blocks — an embedding model, a vector database, and a retriever — whereas RBAG only relies on a static correspondence table. Inference itself is fast: on our infrastructure the retrieval step adds negligible latency, so RAG scales comfortably to large volumes once the components are in place.
+:::
+
+## RAG vs RBAG: preliminary results {#section_6_3 .backgroundStandard_vert}
+
+:::{.enteteAvecTitre}
+An Alternative: Pure RAG 
+:::
+
+[Preliminary results — to be consolidated.]{style="color: red; font-weight: bold;"}
+
+::: {.columns style="margin-top: 1em;"}
+
+::: {.column width="50%"}
+**Accuracy on the multivocal benchmark**
+
+| Approach | Accuracy |
+|----------|----------|
+| RBAG (current pipeline) | **~80 %** |
+| Pure RAG | [**~75–78 %**]{style="color: red;"} |
+:::
+
+::: {.column width="50%"}
+**Take-away**
+
+- RAG is [**slightly below** RBAG]{style="color: red;"} on this benchmark
+- The gap is [**small enough**]{style="color: red;"} to make RAG a viable fallback when no legacy labels exist
+- The real cost of RAG is **operational, not computational**: extra building blocks to maintain (embedding model, vector DB, retriever) — retrieval itself is fast
+:::
+
+:::
+
+[Final figures to be published with the full ablation study.]{style="color: red;"}
+
+::: {.notes}
+These results are preliminary and will be consolidated for the final paper. The headline observation is that pure RAG reaches an accuracy close to RBAG — within a few percentage points on the multivocal benchmark — but slightly lower. The gap is small enough that RAG is a credible fallback when legacy labels are not available, and a strong general-purpose pipeline for any new automatic-coding task. We will publish the full comparison, including ablations on the embedding model, the top-k value, and the LLM used downstream, in the journal version of this work.
 :::
 
 # 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
