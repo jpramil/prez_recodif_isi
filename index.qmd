@@ -27,6 +27,10 @@ editor:
 
 # Introduction {#chapters_0 .backgroundTitre_bleu}
 
+::: {.notes}
+Hello everyone. Thank you for being here. My name is Julien Pramil, I am a data scientist at Insee, the French statistical institute. For the next twenty minutes I will talk about how we are using Large Language Models to handle a structural problem in official statistics — what happens when an official classification is revised, and the existing production model can no longer be retrained in the standard way.
+:::
+
 ## Outline {#section_0_1 .backgroundStandard_bleu .smaller}
 
 :::{.enteteAvecTitre}
@@ -46,6 +50,10 @@ This is the roadmap for the next twenty minutes. I will frame the problem — wh
 :::
 
 # 1. The Problem {#chapters_1 .backgroundTitre_violet}
+
+::: {.notes}
+Let me start by framing the problem. I want to explain why a classification revision is a very particular kind of challenge — and why standard machine learning maintenance does not address it.
+:::
 
 ## When a classification is revised {#section_1_1 .backgroundStandard_violet}
 
@@ -179,6 +187,10 @@ We were initially hopeful that, even though some codes are multivocal in theory,
 
 # 2. Human and Virtual Annotation {#chapters_2 .backgroundTitre_vert}
 
+::: {.notes}
+This chapter is about how we combined human expertise with machine scaling. We ran two annotation campaigns. Together they gave us a realistic baseline of expert agreement, and an explicit reasoning protocol that we could later encode into the LLM pipeline.
+:::
+
 ## Two annotation campaigns {#section_2_1 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
@@ -252,6 +264,10 @@ Second, the campaign made the expert reasoning explicit. Experts look at the lab
 
 
 # 3. Methodology {#chapters_3 .backgroundTitre_bleu}
+
+::: {.notes}
+Now to the methodology. I will describe the pipeline itself: how we reframe the task as a constrained selection problem, what the prompt looks like in practice, and why we run several open-source LLMs in parallel rather than relying on a single model.
+:::
 
 ## Rule-Based Augmented Generation as constrained selection {#section_3_1 .backgroundStandard_bleu}
 
@@ -424,6 +440,10 @@ The intuition behind aggregation is the same as in any ensemble method: compleme
 
 # 4. Infrastructure {#chapters_4 .backgroundTitre_violet}
 
+::: {.notes}
+A short chapter on the infrastructure. The main point I want to make here is that none of this would be operationally viable without SSPCloud, the Insee data science platform that lets us run our full open-source stack as managed services inside every project.
+:::
+
 ## Our MLOps stack on the SSPCloud {#section_4_1 .backgroundStandard_violet}
 
 :::{.enteteAvecTitre}
@@ -461,6 +481,10 @@ For an official statistical institute, this kind of traceability is not optional
 :::
 
 # 5. Results {#chapters_5 .backgroundTitre_jaune}
+
+::: {.notes}
+This is the chapter you have probably been waiting for. I will explain how we evaluate the LLM annotators against the human ground truth, how we reconstruct the full training corpus, and finally how the new classifier — trained on this semi-synthetic corpus — performs.
+:::
 
 ## Evaluation and reconstructed corpus {#section_5_1 .backgroundStandard_jaune}
 
@@ -528,6 +552,10 @@ The take-away is the most important point of the talk. Semi-synthetic labels gen
 :::
 
 # 6. An Alternative: Pure RAG {#chapters_6 .backgroundTitre_vert}
+
+::: {.notes}
+Before concluding, I want to discuss an alternative we are exploring in parallel — a fully RAG-based variant of the pipeline. It is worth presenting because it generalises beyond our specific NACE 2.0 to 2.1 case, and it tells us something about the structural limits of our current approach.
+:::
 
 ## Why try a pure RAG approach? {#section_6_1 .backgroundStandard_vert}
 
@@ -624,6 +652,10 @@ These results are preliminary and will be consolidated for the final paper. The 
 :::
 
 # 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
+
+::: {.notes}
+Time to wrap up. In this last chapter I will summarise the main take-aways, explain why this work matters beyond the specific NACE case, and then mention some current limits and directions for ongoing work.
+:::
 
 ## Take-aways and broader perspective {#section_7_1 .backgroundStandard_bleu}
 
@@ -726,6 +758,10 @@ Conclusion and Perspectives
 - Huang, H., Huang, Y., et al. (2025). *Retrieval-Augmented Generation with Hierarchical Knowledge*. arXiv:2503.10150.
 - Sutton, R. (2019). *The Bitter Lesson*. <http://www.incompleteideas.net/IncIdeas/BitterLesson.html>.
 - Guédès, D., Maurel, F. (2024). *Intégration des innovations de traitement de données dans la production statistique : état des lieux et perspectives*. Insee internal document.
+
+::: {.notes}
+A short list of the main references behind the methodology. The Lewis et al. paper from 2020 introduced retrieval-augmented generation. The ONS ClassifAI paper is, to my knowledge, the closest published work on applying LLMs to official classification tasks. The StructuredRAG paper informs our prompt design for forced JSON output. The Hierarchical RAG paper inspired our ongoing work on tree-style retrieval that exploits the hierarchy of NACE. The Bitter Lesson is a useful background reading for anyone wondering when to invest in domain rules versus when to let scale do the work. The Insee internal document gives the institutional context in which this project sits.
+:::
 
 ## {#pageDeFin data-menu-title="Final page" .unnumbered .backgroundPageFinale}
 
