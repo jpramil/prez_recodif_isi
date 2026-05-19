@@ -388,21 +388,20 @@ Forcing strict JSON is essential at scale — free-text answers are expensive to
 Methodology
 :::
 
-| Model | Size | Inference speed | Performance | Behaviour |
-|-------|------|-----------------|-------------|-----------|
-| Qwen 2.5 | 32B | Slow | Strong | Very restrictive |
-| Ministral | 8B | Very fast | Reasonable | Permissive |
-| Mistral Small | 24B | Slow | Strong | Moderately restrictive |
-| Llama 3.1 | 70B (quantised) | Very slow | Very strong | Moderately restrictive |
+| Model | Size | Inference speed | Behaviour |
+|-------------|------|-----------------|-----------|
+| Qwen3-6-35B MoE | 35B | Very fast (13.37 it/s) | Moderately restrictive |
+| Qwen3-6-35B MoE + thinking | 35B | Less fast (0.95 it/s) | Less restrictive |
+| Gemma4-26B MoE | 26B | Fast (7.87 it/s) | Moderately restrictive |
 
-**Aggregation strategies**: cascade · majority vote · weighted vote
+**Aggregation**: majority vote
 
 
 ::: {.notes}
-We tried no to rely on a single LLM. So, we launch the classification process with four open-source models in parallel — Qwen, Ministral, Mistral Small, and a quantised Llama seventy B. 
-They differ in size, speed, performance, and how often they decline when uncertain.
+We tried not to rely on a single LLM. So, we launch the classification process with three open-source MoE models in parallel — Qwen3-6-35B (with and without thinking) and Gemma4-26B.
+They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant trades a roughly tenfold slowdown — from seventy-four milliseconds per iteration down to about one per second — for an explicit reasoning trace, and turns out to be less restrictive. Gemma4 sits in between, at one hundred and twenty-seven milliseconds per iteration.
 
-Each one is used as an independent virtual annotator. We aggregate the votes — cascade, majority, weighted vote - to make the predictions more accurate. Same idea as any ensemble: complementary errors cancel out.
+Each one is used as an independent virtual annotator. We aggregate the three predictions via a majority vote to make the final relabelling more accurate. Same idea as any ensemble: complementary errors cancel out.
 :::
 
 # 4. Infrastructure {#chapters_4 .backgroundTitre_violet}
@@ -451,30 +450,42 @@ Kubernetes is the substrate. For LLM inference we don't call vLLM directly — w
 Now the results.
 :::
 
-## Evaluation and reconstructed corpus {#section_5_1 .backgroundStandard_jaune}
+## Grading the LLM annotators {#section_5_1 .backgroundStandard_jaune}
 
 :::{.enteteAvecTitre}
 Results
 :::
 
-::: {.columns}
+- Reference: the **~30,000 manually annotated** multivocal cases (NACE 2.1, level 5)
+- Three complementary accuracies — at the most detailed level (sub-class):
+  1. **Overall** — across all observations
+  2. **Codable subset** — restricted to predictions the LLM itself flagged as codable
+  3. **LLM-only** — restricted to cases where the ground-truth code is reachable from the legacy NACE 2.0 code (errors imputable to generation alone)
 
-::: {.column width="50%"}
-### How do you grade an LLM annotator?
+| Model | Inference | Overall | Codable | LLM-only |
+|-------|----------:|--------:|--------:|---------:|
+| Qwen3-6-35B MoE | 75 ms/it | 75.2 % | 78.3 % | 83.3 % |
+| Qwen3-6-35B MoE + thinking | ~1 s/it | 75.7 % | 80.4 % | 84.1 % |
+| Gemma4-26B MoE | 127 ms/it | 75.2 % | 80.0 % | 83.5 % |
+| [**Majority vote**]{.bold} | — | [**78.3 %**]{.bold} | — | [**86.9 %**]{.bold} |
 
-- Reference: the ~30,000 manually annotated multivocal cases
-- Three complementary metrics:
-  1. **Overall accuracy** — across all observations
-  2. **Accuracy on codable cases** — when the description is sufficient
-  3. **LLM-only accuracy** — errors imputable to generation alone
+[A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes. The codable filter is per-model, hence the dash for the ensemble vote.]{.small}
 
-A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes.
+::: {.notes}
+Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics: overall accuracy, accuracy on the codable subset, and LLM-only accuracy that factors out cases where the legacy code couldn't even reach the right answer in the new classification. A naive evaluation underestimates the model substantially.
+
+At level 5 — the most detailed sub-class — each individual model lands around seventy-five percent overall, eighty percent on the codable subset, and eighty-three to eighty-four percent on the LLM-only subset. The thinking variant of Qwen3 adds about two points on the codable subset and about one point on the LLM-only subset compared to the non-thinking one — at a roughly tenfold inference cost. Gemma sits in between.
+
+The majority vote is the clear winner: seventy-eight percent overall (three points above the best individual model) and eighty-seven percent on the LLM-only subset. The codable column is empty for the vote because the codable filter is defined per model, not at the ensemble level.
 :::
 
-::: {.column width="50%"}
-### Reconstructing the training set
+## Reconstructing the training set {#section_5_1b .backgroundStandard_jaune}
 
-- ~1.4 M multivocal observations relabelled via the LLM pipeline
+:::{.enteteAvecTitre}
+Results
+:::
+
+- **~1.4 M multivocal** observations relabelled via the LLM pipeline
 - Combined with **1.3 M univocal** observations (table lookup)
 - **~2 M** labels in NACE 2.1
 - Distribution across codes is **very close** to the original distribution
@@ -482,13 +493,8 @@ A substantial share of disagreements are not LLM errors but ambiguous descriptio
 ::: {.callout-tip}
 This is **semi-synthetic** data: labels are generated algorithmically, but grounded in real observations and structured domain knowledge.
 :::
-:::
-
-:::
 
 ::: {.notes}
-Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics: overall accuracy, accuracy on codable cases, and LLM-only accuracy that factors out cases where the description was ambiguous or the legacy code itself was wrong. A naive evaluation underestimates the model substantially.
-
 Once happy with the LLM on the benchmark, we apply at scale: one point three million univocal items by table lookup, one point four million multivocal items through the LLM pipeline, dropping low-confidence cases. About two million labels in NACE 2.1, with a distribution close to the original. I call this semi-synthetic — real businesses, real descriptions, algorithmic labels.
 :::
 
