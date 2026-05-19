@@ -462,6 +462,20 @@ Results
   2. **Codable subset** — restricted to predictions the LLM itself flagged as codable
   3. **LLM-only** — restricted to cases where the ground-truth code is reachable from the legacy NACE 2.0 code (errors imputable to generation alone)
 
+A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes.
+
+::: {.notes}
+Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics: overall accuracy, accuracy on the codable subset, and LLM-only accuracy that factors out cases where the legacy code couldn't even reach the right answer in the new classification. A naive evaluation underestimates the model substantially.
+:::
+
+## Per-model and ensemble accuracy {#section_5_1a .backgroundStandard_jaune}
+
+:::{.enteteAvecTitre}
+Results
+:::
+
+Accuracies at level 5 (sub-class) — % of cases where the predicted code matches the manual annotation.
+
 | Model | Inference | Overall | Codable | LLM-only |
 |-------|----------:|--------:|--------:|---------:|
 | Qwen3-6-35B MoE | 75 ms/it | 75.2 % | 78.3 % | 83.3 % |
@@ -469,11 +483,9 @@ Results
 | Gemma4-26B MoE | 127 ms/it | 75.2 % | 80.0 % | 83.5 % |
 | [**Majority vote**]{.bold} | — | [**78.3 %**]{.bold} | — | [**86.9 %**]{.bold} |
 
-[A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes. The codable filter is per-model, hence the dash for the ensemble vote.]{.small}
+[The codable filter is per-model, hence the dash for the ensemble vote.]{.small}
 
 ::: {.notes}
-Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics: overall accuracy, accuracy on the codable subset, and LLM-only accuracy that factors out cases where the legacy code couldn't even reach the right answer in the new classification. A naive evaluation underestimates the model substantially.
-
 At level 5 — the most detailed sub-class — each individual model lands around seventy-five percent overall, eighty percent on the codable subset, and eighty-three to eighty-four percent on the LLM-only subset. The thinking variant of Qwen3 adds about two points on the codable subset and about one point on the LLM-only subset compared to the non-thinking one — at a roughly tenfold inference cost. Gemma sits in between.
 
 The majority vote is the clear winner: seventy-eight percent overall (three points above the best individual model) and eighty-seven percent on the LLM-only subset. The codable column is empty for the vote because the codable filter is defined per model, not at the ensemble level.
