@@ -269,7 +269,7 @@ Methodology
 ::: {.column width="60%"}
 **For each observation**:
 
-1. Retrieve the activity description (free text)
+1. Retrieve the activity description (free text + optional precisions: agricultural details, secondary activity, legal category)
 2. Retrieve the legacy NACE 2.0 code
 3. Use the correspondence table to get the set of candidate NACE 2.1 codes
 4. Inject the **explanatory notes** of each candidate code into the prompt
@@ -286,7 +286,7 @@ A form of **Rule-Based Augmented Generation (RBAG)** with a deterministic retrie
 
 | Element | Source |
 |---------|--------|
-| Activity text | Production register |
+| Activity text + precisions | Production register |
 | NACE 2.0 code | Insee NACE Experts |
 | Candidate set | Correspondence table |
 | Explanatory notes | Official NACE 2.1 documentation |
@@ -579,7 +579,7 @@ RAG is worth exploring: no dependency on legacy labels, works when no historical
 An Alternative: Pure RAG
 :::
 
-![](img/rag_pipeline.png){fig-align="center" width=70%}
+![](img/rag_pipeline.png){fig-align="center" width=60%}
 
 ::: {.notes}
 RAG replaces the deterministic retriever with a semantic one. Offline: build a vector database of the NACE 2.1 explanatory notes. At inference: embed the activity description, retrieve the top-k most similar codes, inject candidates and notes into a prompt similar to RBAG, let the LLM pick.
@@ -587,39 +587,48 @@ RAG replaces the deterministic retriever with a semantic one. Offline: build a v
 Versus RBAG: more flexible — no dependency on the legacy code. The trade-off is not speed — retrieval is fast on our infrastructure — but operational complexity: an extra embedding model, vector database, and retriever to maintain.
 :::
 
-## RAG vs RBAG: preliminary results {#section_6_3 .backgroundStandard_vert}
+## RAG vs RBAG: results {#section_6_3 .backgroundStandard_vert}
 
 :::{.enteteAvecTitre}
-An Alternative: Pure RAG 
+An Alternative: Pure RAG
 :::
 
-[Preliminary results — to be consolidated.]{style="color: red; font-weight: bold;"}
+[qwen3-6-35b-moe · 28,499 multivocal obs · only the candidate-set source differs]{.smaller}
 
-::: {.columns style="margin-top: 1em;"}
+::: {.columns style="margin-top: 0.5em;"}
 
-::: {.column width="50%"}
-**Accuracy on the multivocal benchmark**
+::: {.column width="55%"}
+**Level-5 accuracy decomposition**
 
-| Approach | Accuracy |
-|----------|----------|
-| RBAG (current pipeline) | **~80 %** |
-| Pure RAG | [**~75–78 %**]{style="color: red;"} |
+| | RBAG | Pure RAG |
+|---|---|---|
+| Truth in candidate set | **90.0 %** | 83.5 % |
+| LLM picks right (when in set) | 83.4 % | 78.1 % |
+| **Overall** | **75.3 %** | **65.3 %** |
 :::
 
-::: {.column width="50%"}
-**Take-away**
+::: {.column width="45%"}
+**The retriever is the bottleneck**
 
-- RAG is [**slightly below** RBAG]{style="color: red;"} on this benchmark
-- The gap is [**small enough**]{style="color: red;"} to make RAG a viable fallback when no legacy labels exist
-- The real cost of RAG is **operational, not computational**: extra building blocks to maintain (embedding model, vector DB, retriever) — retrieval itself is fast
+- RBAG floor: legacy NACE 2.0 mislabel rate (**~10 %**)
+- RAG floor: retriever miss in top-5 (**~16.5 %**)
+- Candidate-set gap (6.5 pts) > LLM-choice gap (3 pts)
 :::
 
 :::
 
-[Final figures to be published with the full ablation study.]{style="color: red;"}
+[Closing the gap = pushing the retriever (better embeddings, reranker, larger k).]{.bold}
 
 ::: {.notes}
-Preliminary numbers, to be consolidated. Pure RAG reaches accuracy close to RBAG — within a few percentage points, slightly lower. Small enough that RAG is a credible fallback when legacy labels aren't available. Full comparison in the journal version.
+Same model qwen3-6-35b-moe, same evaluation set of about twenty-eight thousand five hundred multivocal observations, same prompt skeleton. Only the candidate-set source differs.
+
+At the most detailed level five, RBAG reaches seventy-five point three percent. Pure RAG drops to sixty-five point three — about ten percentage points behind.
+
+The decomposition tells us where the gap comes from. The candidate set contains the true code in ninety percent of RBAG cases — that's the legacy NACE 2.0 mislabel rate, our floor. For RAG, the top-five retrieved contain the truth only eighty-three and a half percent of the time — a sixteen and a half percent retriever miss rate. So the retriever loses to the legacy labels by six and a half points just on candidate quality.
+
+The LLM also picks slightly worse from a top-five than from a narrow correspondence-table list — seventy-eight versus eighty-three percent — but the dominant factor is the candidate set.
+
+Take-away: RAG is genuinely viable when legacy labels don't exist, but to close the gap we need a stronger retriever — better embeddings, a reranker, or a larger top-k.
 :::
 
 # 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
