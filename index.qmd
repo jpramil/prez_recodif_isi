@@ -29,7 +29,7 @@ editor:
 
 ::: {.notes}
 Hello everyone, thank you for being here. I'm Julien Pramil, data scientist at Insee's innovation lab.
-Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a production model can no longer be retrained the standard way.
+Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a ML classifier can no longer be retrained the standard way.
 :::
 
 ## Outline {#section_0_1 .backgroundStandard_bleu .smaller}
@@ -54,6 +54,39 @@ Quick roadmap. First the problem — why classification revisions break standard
 
 ::: {.notes}
 Let me frame the problem first.
+:::
+
+## Statistical classifications, briefly {#section_1_0 .backgroundStandard_violet}
+
+:::{.enteteAvecTitre}
+The Problem
+:::
+
+::: {.columns}
+
+::: {.column width="50%"}
+**Why public statistics need classifications**
+
+- Aggregating millions of businesses, jobs, or transactions requires a **shared coding system**
+- Same code, same meaning across regions, sectors, time, and countries
+- Without it: no harmonised GDP, no comparable industry statistics
+:::
+
+::: {.column width="50%"}
+**What NACE is**
+
+- The EU classification of **economic activities**
+- Every business unit in production registers gets a NACE code
+- Hierarchical: section → division → group → class → sub-class
+- Revised every ~15 years — the current move: NACE 2.0 → NACE 2.1
+:::
+
+:::
+
+::: {.notes}
+Brief context for those outside official statistics. Public statistics rely on shared classifications — they're what makes aggregated numbers comparable across regions, sectors, and countries. Without a common code there's no coherent GDP by industry, no harmonised European business demography.
+
+NACE is the European Union classification of economic activities. Every unit in our business registers gets a NACE code. It's hierarchical, from broad section down to fine-grained sub-class. And it's revised roughly every fifteen years to reflect economic change. That's the transition we're handling now: NACE 2.0 to NACE 2.1.
 :::
 
 ## When a classification is revised {#section_1_1 .backgroundStandard_violet}
@@ -93,7 +126,7 @@ A recurring challenge for every statistical institute (NACE, COICOP, ISCO, …).
 ::: {.notes}
 In normal ML maintenance, what changes is the inputs — you retrain on fresh labels and the target stays the same. With a classification revision it's different: the Y itself changes. Old codes are gone or shifted, and fresh labels in the new classification don't exist yet.
 
-At Insee we have a fastText inspired classifier in production since twenty twenty-three (powered by the TorchTextClassifiers stack) — two point seven million NACE 2.0 labels behind it. Our question: how do we leverage that asset to bootstrap a model in NACE 2.1, without waiting two or three years for a fresh manually-labelled corpus?
+At Insee we have a fastText inspired classifier in production since twenty twenty-three (powered by the TorchTextClassifiers stack) — two point seven million NACE 2.0 labels behind it. Our question: how do we leverage that asset to bootstrap a model in NACE 2.1, without waiting two or three years for a fresh manually-labelled and expensive corpus?
 :::
 
 ## Our strategy: shifting the old trainset {#section_1_2 .backgroundStandard_violet}
@@ -139,9 +172,14 @@ The Problem
 :::
 
 ::: {.notes}
-NACE 2.1 is being adopted across European NSIs. At Insee: twenty twenty-five dual coding, twenty twenty-six quality, twenty twenty-seven production. The change itself is moderate — seven hundred and thirty-two to seven hundred and forty-six codes at the most detailed level.
+NACE 2.1 is being adopted across European NSIs. 
 
-The complexity is that the correspondence is not a bijection. About five hundred and fifty-one codes have a clean one-to-one mapping — easy, table lookup. But one hundred and eighty-one codes are multivocal: one source code maps to several new codes, up to thirty-eight in extreme cases. The table alone cannot tell you which one is right — you need the activity description and expert judgement.
+The change in the number of sub-classes itself is moderate but the complexity relies in the fact that the correspondence is not a bijection. 
+If a majority of codes have a clean one-to-one mapping, many codes are multivocal: one source code maps to several new codes — typically two to five candidates, up to thirty-eight in extreme cases.
+
+Take the example on the diagram: the legacy class "growing of other non-perennial crops" is split in NACE 2.1 — part of its activities move to a new class, "growing of vegetables and melons, roots and tubers", and the rest stays under "growing of other non-perennial crops". 
+
+A mapping table alone cannot tell you which one applies to a given business — you need the activity description and expert judgement.
 :::
 
 ## The scale of the problem {#section_1_3b .backgroundStandard_violet}
@@ -170,7 +208,7 @@ observations that cannot be recoded by table lookup
 [The problem cannot be solved by a deterministic mapping table alone.]{.bold}
 
 ::: {.notes}
-And these multivocal codes asre not rare. In the theoretical table they're twenty-five percent — but weighted by the actual distribution in our training set, it jumps to fifty-two percent. About one point four million observations we can't recode by table lookup alone. Far too many for human experts.
+And these multivocal codes are not rare. In the mapping table they're twenty-five percent — but weighted by the actual distribution in our training set, it jumps to fifty-two percent. About one point four million observations we can't recode by table lookup alone. Far too many for human experts.
 :::
 
 
@@ -216,7 +254,7 @@ Human and Virtual Annotation
 :::
 
 ::: {.notes}
-We mobilised about twenty-five NACE experts across France to annotate roughly thirty thousand items directly in the new NACE 2.1 classification. We focused on the multivocal cases — the difficult ones where the correspondence table alone is not enough. To make the task manageable, the candidate codes were pre-filtered using the legacy NACE 2.0 code already known. For each item, annotators could assign a code, delegate to a colleague if they lacked expertise, or mark the item as uncodable. This campaign gives us our ground truth — the only reference we have in NACE 2.1.
+We mobilised about twenty-five NACE experts to annotate roughly thirty thousand items directly in the new NACE. We focused on the multivocal cases — the difficult ones where the correspondence table alone is not enough. To make the task manageable, the candidate codes were pre-filtered using the legacy NACE 2.0 code already known. This campaign gives us our ground truth — the only reference we have in NACE 2.1.
 
 Two quick observations from that campaign.
 
