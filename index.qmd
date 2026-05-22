@@ -254,13 +254,11 @@ Human and Virtual Annotation
 :::
 
 ::: {.notes}
-We mobilised about twenty-five NACE experts to annotate roughly thirty thousand items directly in the new NACE. We focused on the multivocal cases — the difficult ones where the correspondence table alone is not enough. To make the task manageable, the candidate codes were pre-filtered using the legacy NACE 2.0 code already known. This campaign gives us our ground truth — the only reference we have in NACE 2.1.
+About twenty-five NACE experts annotated thirty thousand items directly in NACE 2.1, focused on the multivocal cases. That gives us our ground truth.
 
-Two quick observations from that campaign.
+Two takeaways. Agreement is imperfect between experts. If you ask 3 experts to label the same sample, : three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six. So precision metrics need to be read with caution, matching a single annotator perfectly cannot be a strict target.
 
-First, expert agreement itself is imperfect. We ran a controlled exercise where three volunteer experts blindly re-annotated the same sample. Strict three-way agreement was only sixty-two percent, but two-out-of-three agreement reached ninety-six percent. Even trained experts don't systematically converge when unanimity is required. The implication is that our precision metrics need to be read with caution: matching a single annotator perfectly is not a meaningful target.
-
-Second, the campaign made the expert reasoning explicit. Read the description, check whether the legacy code is consistent, consult the candidate codes and their explanatory notes, then decide or mark uncodable. This sequence is precise enough that we can translate it into an LLM prompt — that's exactly the next chapter.
+And the campaign made the expert reasoning explicit, precise enough to encode into an LLM prompt. That's the next chapter.
 :::
 
 
@@ -437,7 +435,7 @@ Methodology
 
 ::: {.notes}
 We tried not to rely on a single LLM. So, we launch the classification process with three open-source MoE models in parallel — Qwen3-6-35B (with and without thinking) and Gemma4-26B.
-They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant trades a roughly tenfold slowdown — from seventy-four milliseconds per iteration down to about one per second — for an explicit reasoning trace, and turns out to be less restrictive. Gemma4 sits in between, at one hundred and twenty-seven milliseconds per iteration.
+They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant is more than 10 times slower. Gemma4 sits in between talking about speed.
 
 Each one is used as an independent virtual annotator. We aggregate the three predictions via a majority vote to make the final relabelling more accurate. Same idea as any ensemble: complementary errors cancel out.
 :::
@@ -454,11 +452,10 @@ A quick word on infrastructure.
 Infrastructure
 :::
 
-**SSPCloud** — Insee's cloud-based data science platform, built on the open-source **Onyxia** — runs our full stack as **one-click managed services** in every project:
+**SSPCloud** is Insee's data science platform, built on the open-source **Onyxia** project and powered by **Kubernetes** as its underlying technology stack. Every component of our pipeline runs as a one-click managed service:
 
-- **Kubernetes** — substrate; every component is a containerised workload
 - **llm.lab** — SSPCloud's LLM gateway, powered by **OpenWebUI + vLLM**
-- **Langfuse** — prompt versioning; every call logged
+- **Langfuse** — prompt versioning
 - **MLflow** — experiment tracking for the downstream classifier
 - **Argo Workflows** — the end-to-end pipeline as a reproducible DAG
 - **MinIO** — S3-compatible storage for datasets and model artefacts
@@ -477,9 +474,9 @@ Infrastructure
 [Entirely open-source, containerised, reproducible.]{.bold}
 
 ::: {.notes}
-Everything runs on SSPCloud, Insee's data science platform, built on the open-source Onyxia software.
+SSPCloud is Insee's data science platform, built on the open-source Onyxia project. Underneath, the whole platform runs on a Kubernetes cluster. The operational point is that every component of our pipeline is available as a one-click managed service in every SSPCloud project.
 
-Kubernetes is the substrate. For LLM inference we don't call vLLM directly — we go through rhe llm.lab provider on premise, which uses OpenWebUI and vLLM under the hood. Langfuse versions every prompt. MLflow tracks the classifier training. Argo Workflows orchestrates the pipeline as a Directed Acyclic Graph. MinIO is the shared S3 storage.
+For LLM inference we don't call vLLM directly: we go through the on-premise llm.lab gateway, which uses OpenWebUI and vLLM under the hood. Langfuse versions prompt teplates. MLflow tracks the classifier training. Argo Workflows orchestrates the pipeline as a Directed Acyclic Graph. MinIO is the shared S3 storage.
 
 Entirely open-source, containerised, reproducible.
 :::
@@ -529,11 +526,9 @@ Accuracies at level 5 (sub-class) — % of cases where the predicted code matche
 [Ensemble accuracy comes at a real cost: three full inference passes, one of them in thinking mode (~10× slower).]{.bold}
 
 ::: {.notes}
-At level 5 — the most detailed sub-class — each individual model lands around seventy-five percent overall, eighty percent on the codable subset, and eighty-three to eighty-four percent on the LLM-only subset. The thinking variant of Qwen3 adds about two points on the codable subset and about one point on the LLM-only subset compared to the non-thinking one — at a roughly tenfold inference cost. Gemma sits in between.
+At level five, each model lands around seventy-five percent overall and eighty-three to eighty-four on the LLM-only subset. The Qwen3 thinking variant adds one to two points at about ten times the cost of inference time.
 
-The majority vote is the winner on accuracy: seventy-eight percent overall (three points above the best individual model) and eighty-seven percent on the LLM-only subset. The codable column is empty for the vote because the codable filter is defined per model, not at the ensemble level.
-
-But that accuracy gain has a real cost. The ensemble requires three full inference passes over the corpus, one of them in thinking mode at about one second per item versus seventy-five milliseconds. On one point four million multivocal observations this is the bulk of the compute budget. In production we have to weigh those extra three points of accuracy against the operational cost.
+The majority vote wins on accuracy, But it means three full inference passes including a thinking run, so on one point four million items it's the bulk of our compute time.
 :::
 
 ## A note on self-reported confidence {#section_5_1ab .backgroundStandard_jaune}
