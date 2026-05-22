@@ -694,17 +694,13 @@ An Alternative: Pure RAG
 [Closing the gap needs better retriever **quality** (embeddings, reranker) — not a wider top-k.]{.bold}
 
 ::: {.notes}
-Same model qwen3-6-35b-moe, same evaluation set of about twenty-eight thousand five hundred multivocal observations, same prompt skeleton. Only the candidate-set source differs.
+Now that the RAG pipeline is clear, the natural question is how it actually compares to RBAG. We ran both under identical conditions: same qwen3-6-35b-moe model, same prompt skeleton, same evaluation set of roughly twenty-eight thousand multivocal observations. Only the candidate-set source differs.
 
-At the most detailed level five, RBAG reaches seventy-five point three percent. Pure RAG drops to sixty-five point three — about ten percentage points behind.
+At level five, RBAG reaches seventy-five percent overall and pure RAG sixty-five, about ten points behind. The bulk of that gap comes from the candidate set itself: the legacy mapping captures the true code ninety percent of the time, the RAG top-five only eighty-three percent.
 
-The decomposition tells us where the gap comes from. The candidate set contains the true code in ninety percent of RBAG cases — that's the legacy NACE 2.0 mislabel rate, our floor. For RAG, the top-five retrieved contain the truth only eighty-three and a half percent of the time — a sixteen and a half percent retriever miss rate. So the retriever loses to the legacy labels by six and a half points just on candidate quality.
+We also tested simply increasing the top-k (from five to ten). The candidate set grows and the truth shows up more often, but the LLM then has more noise to filter through. Its choice quality drops by roughly the same amount, so overall accuracy barely moves.
 
-The LLM also picks slightly worse from a top-five than from a narrow correspondence-table list — seventy-eight versus eighty-three percent — but the dominant factor is the candidate set.
-
-One thing we tested: simply increasing the top-k. The candidate set grows and the truth shows up more often — but the LLM then has more noise to filter through and its choice quality drops by roughly the same amount. The two effects cancel out: overall accuracy stays similar.
-
-Take-away: RAG is genuinely viable when legacy labels don't exist, but to close the gap we need a better retriever — improved embeddings or a reranker — not just a wider net.
+The take-away is that RAG is genuinely viable when no legacy labels exist, but closing the gap requires a better retriever, through improved embeddings or a reranker, not simply a wider net.
 :::
 
 # 7. Conclusion and Perspectives {#chapters_7 .backgroundTitre_bleu}
@@ -747,54 +743,6 @@ What we've shown: classification revisions can be handled by treating LLMs as vi
 Why it matters: classification revisions are recurring — NACE every fifteen to twenty years, similar cycles for COICOP, ISCO, CPA. The traditional bottleneck is two to three years waiting for human annotations. This shortens that delay significantly.
 
 A few open issues: inference cost is real and we inherit upstream errors. On the methodology side we're improving the RAG variant and extending the approach to other classifications.
-:::
-
-## Acknowledgements {#section_7_3 .backgroundStandard_bleu .smaller}
-
-:::{.enteteAvecTitre}
-Conclusion and Perspectives
-:::
-
-::: {.columns}
-
-::: {.column width="50%"}
-- **SIRENE Quality Office** — first annotation campaign
-- **APE business experts** — second annotation campaign
-- **DNE** (Insee, Methodology and IT departments)
-- **SSP Lab** — methodology and innovation
-- **RIAS** (Regional Insee teams)
-:::
-
-::: {.column width="50%"}
-**Code and slides are open**
-
-- [github.com/InseeFrLab/codif-ape-nace-revision](https://github.com/InseeFrLab/codif-ape-nace-revision)
-- [github.com/InseeFrLab/codif-ape-prez](https://github.com/InseeFrLab/codif-ape-prez)
-- [github.com/InseeFrLab/codif-ape-graph-rag](https://github.com/InseeFrLab/codif-ape-graph-rag)
-
-:::
-
-:::
-
-::: {.notes}
-Quick thanks. The annotation campaigns mobilised the SIRENE Quality Office and the regional business experts. Methodology built with SSP Lab, our innovation lab. Integration with the methodology and IT departments and the regional teams. All code is open on InseeFrLab.
-:::
-
-## Selected references {#section_7_4 .backgroundStandard_bleu .smaller}
-
-:::{.enteteAvecTitre}
-Conclusion and Perspectives
-:::
-
-- Lewis, P., Piktus, A., Petroni, F., et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. arXiv:2005.11401.
-- Spakulova, I., Lee, P. (2024). *ClassifAI – Exploring the use of Large Language Models (LLMs) to assign free text to commonly used classifications*. ONS Data Science Campus.
-- Shorten, C., Pierse, C., et al. (2024). *StructuredRAG: JSON Response Formatting with Large Language Models*. arXiv:2408.11061.
-- Huang, H., Huang, Y., et al. (2025). *Retrieval-Augmented Generation with Hierarchical Knowledge*. arXiv:2503.10150.
-- Sutton, R. (2019). *The Bitter Lesson*. <http://www.incompleteideas.net/IncIdeas/BitterLesson.html>.
-- Guédès, D., Maurel, F. (2024). *Intégration des innovations de traitement de données dans la production statistique : état des lieux et perspectives*. Insee internal document.
-
-::: {.notes}
-Main references. Lewis et al. introduced RAG. The ONS ClassifAI paper is the closest published work on LLMs for official classification. StructuredRAG informs our JSON output design. Hierarchical RAG inspires our ongoing tree-style retrieval. The Bitter Lesson for context.
 :::
 
 ## {#pageDeFin data-menu-title="Final page" .unnumbered .backgroundPageFinale}
