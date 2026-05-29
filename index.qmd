@@ -19,36 +19,27 @@ transition: slide
 
 embed-resources: true
 custom-toc: true
+toc-title: "Outline"
 lightbox: true
+
+toc-notes: |
+  Quick roadmap. First the problem — why classification revisions break standard ML. Then how we use LLMs as virtual annotators to relabel an existing training corpus, with a quick word on infrastructure. Then the results. A short detour on an alternative pure-RAG variant, and a brief conclusion.
+
+filters:
+  - toc-notes-filter.lua
+
+title-slide-attributes:
+  data-background-image: _extensions/insee-clair/ressources/revealJs/1_Template-INSEE-Clair_premiere-page.svg
+  data-backgroupnd-size: contain
+  data-background-opacity: "1"
+  data-notes: |
+    Hello everyone, thank you for being here. I'm Julien Pramil, data scientist at Insee's innovation lab.
+    Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a ML classifier can no longer be retrained the standard way.
 
 editor:
   render-on-save: true
 ---
 
-# Introduction {#chapters_0 .backgroundTitre_bleu}
-
-::: {.notes}
-Hello everyone, thank you for being here. I'm Julien Pramil, data scientist at Insee's innovation lab.
-Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a ML classifier can no longer be retrained the standard way.
-:::
-
-## Outline {#section_0_1 .backgroundStandard_bleu .smaller}
-
-:::{.enteteAvecTitre}
-Introduction
-:::
-
-1. **The problem** — A model whose target variable is changing
-2. **Human and virtual annotation** — Combining expert and machine knowledge
-3. **Methodology** — A constrained LLM pipeline with Rule-Based Augmented Generation
-4. **Infrastructure** — Open-source MLOps on the SSPCloud
-5. **Results** — Performance of the retrained classifier
-6. **An alternative: pure RAG** — When no legacy labels exist
-7. **Conclusion and perspectives**
-
-::: {.notes}
-Quick roadmap. First the problem — why classification revisions break standard ML. Then how we use LLMs as virtual annotators to relabel an existing training corpus, with a quick word on infrastructure. Then the results. A short detour on an alternative pure-RAG variant, and a brief conclusion.
-:::
 
 # 1. The Problem {#chapters_1 .backgroundTitre_violet}
 
@@ -65,11 +56,12 @@ The Problem
 ::: {.columns}
 
 ::: {.column width="50%"}
-**Why public statistics need classifications**
+**Public statistics rely on shared classifications**
 
-- Aggregating millions of businesses, jobs, or transactions requires a **shared coding system**
-- Same code, same meaning across regions, sectors, time, and countries
-- Without it: no harmonised GDP, no comparable industry statistics
+- They are what makes aggregated numbers comparable
+- We aggregate millions of businesses, jobs, or products...
+- Need shared coding systems
+
 :::
 
 ::: {.column width="50%"}
@@ -138,7 +130,13 @@ The Problem
 ![](img/schema_recodif_ape.png){fig-align="center" width=50%}
 
 ::: {.notes}
-The strategy is here on the diagram. We use LLMs once, offline, to relabel our legacy NACE 2.0 training corpus into NACE 2.1. Then we train a new classifier on the relabelled corpus. The LLM is not a real-time auto-coder — it's a translation tool used once.
+The strategy is here on the diagram. 
+
+We use LLMs once, offline, to relabel our legacy NACE 2.0 training corpus into NACE 2.1. 
+
+Then we train a new classifier on the relabelled corpus. 
+
+The LLM is not a real-time auto-coder — it's a translation tool used once.
 :::
 
 ## NACE 2.0 → 2.1 and the multivocal codes {#section_1_3 .backgroundStandard_violet}
@@ -150,21 +148,21 @@ The Problem
 ::: {.columns}
 
 ::: {.column width="50%"}
-**Timeline at Insee**
-
-- **2025** — Dual coding period
-- **2026** — Quality improvement
-- **2027** — NACE 2.1 becomes the production standard
 
 **Scope of the change**
 
-- Level 5 (sub-classes): **746** vs **732**
+- Change in the number of sub-classes? Moderate...
+  - from **746** to **732**
 - Mostly splits at level 4, with a few merges and recompositions
+
+**Complexity relies on non-bijective cases!**
+
+- Univocal: one-to-one mapping 
+- Multivocal: 1-to-many relation (~2 to 5)
+
 :::
 
 ::: {.column width="50%" style="margin-top: 3em;"}
-**Univocal** (1-to-1) — 551 classes — direct mapping.
-**Multivocal** (1-to-N) — 181 classes — up to **38** candidates.
 
 ![](img/schema_ambiguous.png){fig-align="center" width=90%}
 :::
