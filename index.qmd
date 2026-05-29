@@ -231,8 +231,6 @@ Human and Virtual Annotation
 - ~30k annotations directly in NACE 2.1
 - ~25 NACE experts
 - Focused on multivocal cases (the hard ones)
-- Candidates pre-filtered via the legacy NACE 2.0 code
-- For each item: assign a code · delegate · mark uncodable
 :::
 
 ::: {.column width="50%"}
@@ -240,8 +238,8 @@ Human and Virtual Annotation
 
 **Expert agreement is imperfect**
 
-- 3-way blind re-annotation: 62 % strict agreement, 96 % majority
-- Experts don't systematically converge: we stay cautious when interpreting our precision metrics
+- 3-experts blind re-annotation: 62 % strict agreement, 96 % majority
+- Experts are far from converging systematically : we stay cautious when interpreting our precision metrics
 
 **Explicit reasoning protocol**
 
@@ -276,15 +274,15 @@ Methodology
 
 - NACE 2.1 is too recent — barely in any pre-training corpus
 - Without context, the model falls back on **NACE 2.0**
-- Even with a known classification: **746 codes** is too large a space for reliable open generation
+- Even with a known classification: **732 codes** is too large a space for reliable open generation
 
 **Constrained selection instead:**
 
 - For each observation, we already know the **NACE 2.0 code**
 - The correspondence table gives the **set of admissible NACE 2.1 codes**
 - The task becomes: **pick the right code from a short, restricted list**
+- Output aligned with official rules
 
-[Without context, the model hallucinates. With context, it disambiguates.]{.bold .bleu_insee}
 
 ::: {.notes}
 First decision: don't ask the LLM directly to classify into seven hundred and forty-six codes. Two reasons. NACE 2.1 is too recent — barely in any pre-training corpus, so the model falls back on NACE 2.0. And anyway, seven hundred and forty-six codes is a too large space for reliable open generation.
@@ -424,11 +422,13 @@ Methodology
 
 | Model | Size | Inference speed | Behaviour |
 |-------------|------|-----------------|-----------|
-| Qwen3-6-35B MoE | 35B | Very fast (13.37 it/s) | Moderately restrictive |
-| Qwen3-6-35B MoE + thinking | 35B | Less fast (0.95 it/s) | Less restrictive |
-| Gemma4-26B MoE | 26B | Fast (7.87 it/s) | Moderately restrictive |
+| Qwen3-6-35B MoE | 35B | Very fast (13 it/s) | Moderately restrictive |
+| Qwen3-6-35B MoE + thinking | 35B | Less fast (1 it/s) | Less restrictive |
+| Gemma4-26B MoE | 26B | Fast (8 it/s) | Moderately restrictive |
 
-**Aggregation**: majority vote
+➕️ **Aggregation**: majority vote.
+
+Differents size, different throughput. 
 
 
 ::: {.notes}
@@ -450,13 +450,15 @@ A quick word on infrastructure.
 Infrastructure
 :::
 
-**SSPCloud** is Insee's data science platform, built on the open-source **Onyxia** project and powered by **Kubernetes** as its underlying technology stack. Every component of our pipeline runs as a one-click managed service:
+**SSPCloud** is Insee's data science platform, built on the open-source **Onyxia** project and powered by **Kubernetes** as its underlying technology stack. 
 
-- **llm.lab** — SSPCloud's LLM gateway, powered by **OpenWebUI + vLLM**
+Main elements of the technical stack:
+
+- **MinIO** — S3-compatible storage for datasets and model artifacts
+- **llm.lab** — SSPCloud's LLM provider on premise, (**OpenWebUI + vLLM**)
 - **Langfuse** — prompt versioning
-- **MLflow** — experiment tracking for the downstream classifier
-- **Argo Workflows** — the end-to-end pipeline as a reproducible DAG
-- **MinIO** — S3-compatible storage for datasets and model artefacts
+- **MLflow** — experiment tracking
+- **Argo Workflows** — the end-to-end pipeline orchestrator
 
 ::: {style="text-align: center; margin-top: 1em;"}
 ![](img/logos/onyxia.svg){height=50px style="margin: 0 0.6em;"}
@@ -514,9 +516,9 @@ Accuracies at level 5 (sub-class) — % of cases where the predicted code matche
 
 | Model | Inference | Overall | Codable | LLM-only |
 |------------------|----------:|--------:|--------:|---------:|
-| Qwen3-6-35B MoE | 75 ms/it | 75.2 % | 78.3 % | 83.3 % |
-| Qwen3-6-35B MoE + thinking | ~1 s/it | 75.7 % | 80.4 % | 84.1 % |
-| Gemma4-26B MoE | 127 ms/it | 75.2 % | 80.0 % | 83.5 % |
+| Qwen3-6-35B MoE | 13 it/s | 75.2 % | 78.3 % | 83.3 % |
+| Qwen3-6-35B MoE + thinking | ~1 it/s | 75.7 % | 80.4 % | 84.1 % |
+| Gemma4-26B MoE | 8 it/s | 75.2 % | 80.0 % | 83.5 % |
 | [**Majority vote**]{.bold} | — | [**78.3 %**]{.bold} | — | [**86.9 %**]{.bold} |
 
 [The codable filter is per-model, hence the dash for the ensemble vote.]{.small}
@@ -535,7 +537,7 @@ The majority vote wins on accuracy, But it means three full inference passes inc
 Results
 :::
 
-- Hoped use: filter low-confidence predictions, gate an active-learning loop
+- Hoped use: filter low-confidence predictions
 - Observed (all three LLMs): models are overconfident, correct and incorrect distributions overlap, raising the threshold trims coverage faster than it lifts precision
 
 [Self-reported confidence is not a reliable filter on its own.]{.bold}
@@ -550,13 +552,15 @@ We hoped to use the LLM's self-reported confidence to filter low-quality predict
 Results
 :::
 
+Once happy with the LLM on the benchmark, we apply at scale:
+
 - **~1.0 M multivocal** observations relabelled via the LLM pipeline
 - Combined with **1.3 M univocal** observations (table lookup)
 - **~2.3 M** labels in NACE 2.1
 - Distribution across predicted codes is **very close** to the labelled distribution
 
 ::: {.callout-tip}
-This is **semi-synthetic** data: labels are generated algorithmically, but grounded in real observations and structured domain knowledge.
+This is **semi-synthetic** data: real businesses, real descriptions, but algorithmic labels.
 :::
 
 ::: {.notes}
@@ -573,11 +577,11 @@ Results
 ::: {style="text-align: center; margin-top: 1.5em;"}
 
 [**TorchTextClassifiers**]{style="font-size: 1.1em;"} retrained on the semi-synthetic corpus
-*(same architecture as the NACE 2.0 production model)*
 
 [~80 %]{style="font-size: 4em; font-weight: bold; display: block; margin: 0.3em 0;"}
 
-overall accuracy on a representative NACE 2.1 test set,
+overall accuracy on a representative NACE 2.1 test set
+
 **≈** the legacy NACE 2.0 classifier on its NACE 2.0 task
 
 ::: {style="margin-top: 1.2em; font-size: 0.85em;"}
@@ -586,9 +590,8 @@ overall accuracy on a representative NACE 2.1 test set,
 
 :::
 
-::: {.fragment .fade-in style="text-align: center; margin-top: 1.5em;"}
-[Semi-synthetic LLM-generated labels can substitute for manual annotations in the early stages of a classification transition.]{.bold}
-:::
+**Semi-synthetic LLM-generated labels can substitute for manual annotations in the early stages of a classification transition.**
+
 
 ::: {.notes}
 Key question: can a classifier trained on LLM-generated labels match one trained on real human labels?
@@ -725,7 +728,7 @@ Conclusion and Perspectives
 - Inference cost is non-trivial at ~1 M queries
 - Legacy errors are inherited
 - Improving the RAG variant — embeddings, rerankers, hierarchy-aware retrieval
-- Extending to COICOP, ISCO, CPA…
+- Extending to COICOP, ISCO, …
 :::
 
 :::
@@ -733,7 +736,7 @@ Conclusion and Perspectives
 ::: {.notes}
 What we've shown: classification revisions can be handled by treating LLMs as virtual annotators, constrained by the correspondence table and official explanatory notes. The classifier trained on the semi-synthetic corpus matches our previous-generation production model.
 
-Why it matters: classification revisions are recurring — NACE every fifteen to twenty years, similar cycles for COICOP, ISCO, CPA. The traditional bottleneck is two to three years waiting for human annotations. This shortens that delay significantly.
+Why it matters: classification revisions are recurring — NACE every fifteen to twenty years, similar cycles for COICOP, ISCO,... The traditional bottleneck is two to three years waiting for human annotations. This shortens that delay significantly.
 
 A few open issues: inference cost is real and we inherit upstream errors. On the methodology side we're improving the RAG variant and extending the approach to other classifications.
 :::
