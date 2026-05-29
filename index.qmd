@@ -127,7 +127,7 @@ At Insee we have a fastText inspired classifier in production since twenty twent
 The Problem
 :::
 
-![](img/schema_recodif_ape.png){fig-align="center" width=50%}
+![](img/schema_recodif_ape.png){.r-stretch fig-align="center"}
 
 ::: {.notes}
 The strategy is here on the diagram. 
