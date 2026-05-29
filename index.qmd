@@ -272,9 +272,8 @@ Methodology
 
 **Why not ask the LLM directly?**
 
-- NACE 2.1 is too recent — barely in any pre-training corpus
-- Without context, the model falls back on **NACE 2.0**
-- Even with a known classification: **732 codes** is too large a space for reliable open generation
+- **732 codes** is too large a space for reliable open generation.
+- Hallucinations are very frequent.
 
 **Constrained selection instead:**
 
@@ -748,7 +747,7 @@ A few open issues: inference cost is real and we inherit upstream errors. On the
 ::: {.column .gauche .coordonnees width=30%}
 - Julien PRAMIL
 - Data Scientist
-- [Directorate of statistical methodology]{.ligneBlancheApres}
+- [Innovation Lab]{.ligneBlancheApres}
 - [Insee — France]{.ligneBlancheApres}
 - julien.pramil@insee.fr
 :::

@@ -1,0 +1,130 @@
+Hello everyone, thank you for being here. I'm Julien Pramil, data scientist at Insee's innovation lab.
+Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a ML classifier can no longer be retrained the standard way.
+
+Quick roadmap. First the problem — why classification revisions break standard ML. Then how we use LLMs as virtual annotators to relabel an existing training corpus, with a quick word on infrastructure. Then the results. A short detour on an alternative pure-RAG variant, and a brief conclusion.
+
+Let me frame the problem first.
+
+Brief context for those outside official statistics. Public statistics rely on shared classifications — they're what makes aggregated numbers comparable across regions, sectors, and countries. Without a common code there's no coherent GDP by industry, no harmonised European business demography.
+
+NACE is the European Union classification of economic activities. Every unit in our business registers gets a NACE code. It's hierarchical, from broad section down to fine-grained sub-class. And it's revised roughly every fifteen years to reflect economic change. That's the transition we're handling now: NACE 2.0 to NACE 2.1.
+
+In normal ML maintenance, what changes is the inputs — you retrain on fresh labels and the target stays the same. With a classification revision it's different: the Y itself changes. Old codes are gone or shifted, and fresh labels in the new classification don't exist yet.
+
+At Insee we have a fastText inspired classifier in production since twenty twenty-three (powered by the TorchTextClassifiers stack) — two point seven million NACE 2.0 labels behind it. Our question: how do we leverage that asset to bootstrap a model in NACE 2.1, without waiting two or three years for a fresh manually-labelled and expensive corpus?
+
+The strategy is here on the diagram. 
+
+We use LLMs once, offline, to relabel our legacy NACE 2.0 training corpus into NACE 2.1. 
+
+Then we train a new classifier on the relabelled corpus. 
+
+The LLM is not a real-time auto-coder — it's a translation tool used once.
+
+NACE 2.1 is being adopted across European NSIs. 
+
+The change in the number of sub-classes itself is moderate but the complexity relies in the fact that the correspondence is not a bijection. 
+If a majority of codes have a clean one-to-one mapping, many codes are multivocal: one source code maps to several new codes — typically two to five candidates, up to thirty-eight in extreme cases.
+
+Take the example on the diagram: the legacy class "growing of other non-perennial crops" is split in NACE 2.1 — part of its activities move to a new class, "growing of vegetables and melons, roots and tubers", and the rest stays under "growing of other non-perennial crops". 
+
+A mapping table alone cannot tell you which one applies to a given business — you need the activity description and expert judgement.
+
+And these multivocal codes are not rare. In the mapping table they're twenty-five percent — but weighted by the actual distribution in our training set, it jumps to fifty-two percent. About one point four million observations we can't recode by table lookup alone. Far too many for human experts.
+
+Quick chapter on annotation.
+
+About twenty-five NACE experts annotated thirty thousand items directly in NACE 2.1, focused on the multivocal cases. That gives us our ground truth.
+
+Two takeaways. Agreement is imperfect between experts. If you ask 3 experts to label the same sample, : three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six. So precision metrics need to be read with caution, matching a single annotator perfectly cannot be a strict target.
+
+And the campaign made the expert reasoning explicit, precise enough to encode into an LLM prompt. That's the next chapter.
+
+The pipeline itself.
+
+First decision: don't ask the LLM directly to classify into seven hundred and forty-six codes. Two reasons. NACE 2.1 is too recent — barely in any pre-training corpus, so the model falls back on NACE 2.0. And anyway, seven hundred and forty-six codes is a too large space for reliable open generation.
+
+Instead: constrained selection. For each observation we know the legacy NACE 2.0 code. The correspondence table gives us the admissible NACE 2.1 codes — usually two to five. We ask the LLM to pick from that short list. Manageable prompt, decisions aligned with official rules.
+
+Let's describe the six steps pipeline. 
+
+- Get the activity text + optional precisions, 
+- get the legacy code, 
+- look up the candidates from the table, 
+- inject the official explanatory notes for each candidate, 
+- ask the LLM to pick, parse the JSON response.
+
+The key idea is in step four. The explanatory notes are the official prose definitions — with inclusion and exclusion rules and examples. We inject those into the prompt: same reference material a human expert would consult.
+
+Let's call this Rule-Based Augmented Generation (RBAG), by analogy with RAG. Same idea but the retriever is not vector search — it's a deterministic lookup in an official table.
+
+The prompt has two parts. A system prompt — same every time, defines the role. A user prompt — observation-specific, with the activity, the legacy code, the candidate codes plus notes, and seven explicit rules.
+
+Output is a structured JSON with four fields. 
+
+- Codable: was the description sufficient (LLM's self assessement). 
+- nace2.1: the chosen code. 
+- nace_legacy_valid: a useful side benefit — the model flags suspicious legacy codes. 
+- Confidence: LLM's self-assessed classification confidence, used to filter low-confidence cases.
+
+Forcing strict JSON is essential at scale — free-text answers are expensive to parse reliably.
+
+We tried not to rely on a single LLM. So, we launch the classification process with three open-source MoE models in parallel — Qwen3-6-35B (with and without thinking) and Gemma4-26B.
+They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant is more than 10 times slower. Gemma4 sits in between talking about speed.
+
+Each one is used as an independent virtual annotator. We aggregate the three predictions via a majority vote to make the final relabelling more accurate. Same idea as any ensemble: complementary errors cancel out.
+
+A quick word on infrastructure.
+
+SSPCloud is Insee's data science platform, built on the open-source Onyxia project. Underneath, the whole platform runs on a Kubernetes cluster. The operational point is that every component of our pipeline is available as a one-click managed service in every SSPCloud project.
+
+For LLM inference we don't call vLLM directly: we go through the on-premise llm.lab gateway, which uses OpenWebUI and vLLM under the hood. Langfuse versions prompt teplates. MLflow tracks the classifier training. Argo Workflows orchestrates the pipeline as a Directed Acyclic Graph. MinIO is the shared S3 storage.
+
+Entirely open-source, containerised, reproducible.
+
+Now the results.
+
+Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics. Overall accuracy. Accuracy on the codable subset, where the LLM itself flagged the prediction as codable. And LLM-only accuracy, restricted to cases where the true code is in the candidate list — that isolates the LLM's choice quality from cases where the legacy code couldn't even reach the right answer in the new classification. A naive evaluation underestimates the model substantially.
+
+At level five, each model lands around seventy-five percent overall and eighty-three to eighty-four on the LLM-only subset. The Qwen3 thinking variant adds one to two points at about ten times the cost of inference time.
+
+The majority vote wins on accuracy, But it means three full inference passes including a thinking run, so on one point four million items it's the bulk of our compute time.
+
+We hoped to use the LLM's self-reported confidence to filter low-quality predictions or gate an active-learning loop. Across all three models, that doesn't work: they are overconfident, correct and incorrect distributions overlap, and raising the threshold loses coverage faster than it gains precision. A useful signal would need something else, like consistency across runs or a separate verifier. Ongoing work.
+
+Once happy with the LLM on the benchmark, we apply at scale: one point three million univocal items by table lookup, about one million multivocal items through the LLM pipeline, dropping uncodable cases. About two point 3 million labels in NACE 2.1, with a distribution close to the original. 
+I call this semi-synthetic training set — real businesses, real descriptions, but algorithmic labels.
+
+Key question: can a classifier trained on LLM-generated labels match one trained on real human labels?
+
+The last time we retrained the TorchTextClassifiers model, the semi-synthetic corpus was still an earlier vintage — the pipeline shown today produces better labels than what fed that training. Even then, we reached around eighty percent overall accuracy on a representative NACE 2.1 test set. That's very comparable to what the previous-generation classifier achieves on its own NACE 2.0 task.
+
+That's the main take-away of the talk: semi-synthetic LLM labels can substitute for manual annotations in the early stages of a classification transition.
+
+A short detour on an alternative we're exploring in parallel.
+
+RBAG has limits worth pointing out. It uses legacy NACE 2.0 labels as input — so any annotation error in the old system propagates. It needs an official correspondence table. And it only applies to a revision of an existing classification.
+
+RAG is worth exploring: no dependency on legacy labels, works when no historical labels exist, more general for any coding task. And we want an empirical comparison — is RAG close to RBAG, or much worse?
+
+In a pure RAG setup, the deterministic retriever is replaced with a semantic one. Offline, we build a vector database of the NACE 2.1 explanatory notes. At inference time, we embed the activity description, retrieve the top-k most similar codes, inject those candidates and their notes into a prompt that follows the same skeleton as in RBAG, and let the LLM pick the right one.
+
+Compared to RBAG, the trade-off is not about speed: retrieval is fast on our infrastructure. It is about operational complexity. We now have an extra embedding model, a vector database and a retriever to maintain.
+
+Now that the RAG pipeline is clear, the natural question is how it actually compares to RBAG. We ran both under identical conditions: same qwen3-6-35b-moe model, same prompt skeleton, same evaluation set of roughly twenty-eight thousand multivocal observations. Only the candidate-set source differs.
+
+At level five, RBAG reaches seventy-five percent overall and pure RAG sixty-five, about ten points behind. The bulk of that gap comes from the candidate set itself: the legacy mapping captures the true code ninety percent of the time, the RAG top-five only eighty-three percent.
+
+We also tested simply increasing the top-k (from five to ten). The candidate set grows and the truth shows up more often, but the LLM then has more noise to filter through. Its choice quality drops by roughly the same amount, so overall accuracy barely moves.
+
+The take-away is that RAG is genuinely viable when no legacy labels exist, but closing the gap requires a better retriever, through improved embeddings or a reranker, not simply a wider net.
+
+Wrap-up.
+
+What we've shown: classification revisions can be handled by treating LLMs as virtual annotators, constrained by the correspondence table and official explanatory notes. The classifier trained on the semi-synthetic corpus matches our previous-generation production model.
+
+Why it matters: classification revisions are recurring — NACE every fifteen to twenty years, similar cycles for COICOP, ISCO,... The traditional bottleneck is two to three years waiting for human annotations. This shortens that delay significantly.
+
+A few open issues: inference cost is real and we inherit upstream errors. On the methodology side we're improving the RAG variant and extending the approach to other classifications.
+
+Thank you for your attention. Happy to take questions.
