@@ -504,7 +504,6 @@ Results
   2. **Codable subset** — restricted to predictions the LLM itself flagged as codable
   3. **LLM-only**: restricted to cases where the true code is in the candidate list (isolates the LLM's choice quality)
 
-A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes.
 
 ::: {.notes}
 Evaluation is hard. The reference is the thirty thousand annotated cases, which themselves have human disagreement. We use three metrics. Overall accuracy. Accuracy on the codable subset, where the LLM itself flagged the prediction as codable. And LLM-only accuracy, restricted to cases where the true code is in the candidate list — that isolates the LLM's choice quality from cases where the legacy code couldn't even reach the right answer in the new classification. A naive evaluation underestimates the model substantially.
@@ -529,6 +528,8 @@ Accuracies at level 5 (sub-class) — % of cases where the predicted code matche
 [The codable filter is per-model, hence the dash for the ensemble vote.]{.small}
 
 [Ensemble accuracy comes at a real cost: three full inference passes, one of them in thinking mode (~10× slower).]{.bold}
+
+A substantial share of disagreements are not LLM errors but ambiguous descriptions or legacy-coding mistakes.
 
 ::: {.notes}
 At level five, each model lands around seventy-five percent overall and eighty-three to eighty-four on the LLM-only subset. The Qwen3 thinking variant adds one to two points at about ten times the cost of inference time.
