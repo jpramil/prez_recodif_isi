@@ -34,7 +34,7 @@ title-slide-attributes:
   data-background-opacity: "1"
   data-notes: |
     Hello everyone, thank you for being here. I'm Julien Pramil, data scientist at Insee's innovation lab.
-    Twenty minutes on how we use LLMs to handle a structural problem in official statistics: what happens when an official classification changes and a ML classifier can no longer be retrained the standard way.
+    We have twenty minutes on how we use LLMs to handle official classifications changes, which is a frequent and structural challenge in official statistics.
 
 editor:
   render-on-save: true
@@ -132,7 +132,7 @@ The Problem
 ::: {.notes}
 The strategy is here on the diagram. 
 
-We use LLMs once, offline, to relabel our legacy NACE 2.0 training corpus into NACE 2.1. 
+We use LLMs one time, to add a NACE 2.1 label on each observation of this preexisting train set. 
 
 Then we train a new classifier on the relabelled corpus. 
 
@@ -172,12 +172,13 @@ The Problem
 ::: {.notes}
 NACE 2.1 is being adopted across European NSIs. 
 
-The change in the number of sub-classes itself is moderate but the complexity relies in the fact that the correspondence is not a bijection. 
-If a majority of codes have a clean one-to-one mapping, many codes are multivocal: one source code maps to several new codes — typically two to five candidates, up to thirty-eight in extreme cases.
+The complexity for us relies in the fact that the correspondance between old codes and new codes can be non bijective.
 
-Take the example on the diagram: the legacy class "growing of other non-perennial crops" is split in NACE 2.1 — part of its activities move to a new class, "growing of vegetables and melons, roots and tubers", and the rest stays under "growing of other non-perennial crops". 
+A majority of codes have a clean one-to-one mapping, but some old codes map to several new codes — typically two to five candidates, up to thirty-eight in extreme cases.
 
-A mapping table alone cannot tell you which one applies to a given business — you need the activity description and expert judgement.
+With theses cases, let's call them multivocal, a simple look up with mapping table alone cannot tell you which one applies to a given business activity in our old training set — you need the activity description and expert judgement.
+
+
 :::
 
 ## The scale of the problem {#section_1_3b .backgroundStandard_violet}
@@ -206,7 +207,7 @@ observations that cannot be recoded by table lookup
 [The problem cannot be solved by a deterministic mapping table alone.]{.bold}
 
 ::: {.notes}
-And these multivocal codes are not rare. In the mapping table they're twenty-five percent — but weighted by the actual distribution in our training set, it jumps to fifty-two percent. About one point four million observations we can't recode by table lookup alone. Far too many for human experts.
+And these multivocal codes are not rare. In the mapping table they're twenty-five percent — but weighted by the actual distribution in our training set, it jumps to fifty-two percent. About one point four million observations we can't recode easily. Far too many for human experts.
 :::
 
 
@@ -252,9 +253,12 @@ Human and Virtual Annotation
 ::: {.notes}
 About twenty-five NACE experts annotated thirty thousand items directly in NACE 2.1, focused on the multivocal cases. That gives us our ground truth.
 
-Two takeaways. Agreement is imperfect between experts. If you ask 3 experts to label the same sample, : three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six. So precision metrics need to be read with caution, matching a single annotator perfectly cannot be a strict target.
+Two takeaways from this annotation campagne. 
+Agreement is really imperfect between experts. If you ask 3 experts to label the same sample, : three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six. 
 
-And the campaign made the expert reasoning explicit, precise enough to encode into an LLM prompt. That's the next chapter.
+So, accuracy metrics must be read with a critical eye, or even with leniency.
+
+And the campaign made the expert reasoning more explicit for us, helping us to build a consistente LLM prompt . That's the next chapter.
 :::
 
 
