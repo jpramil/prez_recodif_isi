@@ -110,8 +110,8 @@ A recurring challenge for every statistical institute (NACE, COICOP, ISCO, …).
 
 :::
 
-- At Insee, a **TorchTextClassifiers** classifier (fastText inspired) in production since 2023 to assign NACE 2.0 codes
-- Trained on a 2.7 millions labels trainset.
+- At Insee, a **TorchTextClassifiers** classifier (fastText-inspired) in production since 2023 to assign NACE 2.0 codes
+- Trained on a 2.7-million-label training set.
 
 **Central question**: how can we leverage years of accumulated production knowledge in the old classification to bootstrap a model in the new one?
 
@@ -155,7 +155,7 @@ The Problem
   - from **746** to **732**
 - Mostly splits at level 4, with a few merges and recompositions
 
-**Complexity relies on non-bijective cases!**
+**Complexity lies in non-bijective cases!**
 
 - Univocal: one-to-one mapping 
 - Multivocal: 1-to-many relation (~2 to 5)
@@ -172,11 +172,11 @@ The Problem
 ::: {.notes}
 NACE 2.1 is being adopted across European NSIs. 
 
-The complexity for us relies in the fact that the correspondance between old codes and new codes can be non bijective.
+The complexity for us lies in the fact that the correspondance between old codes and new codes can be non bijective.
 
 A majority of codes have a clean one-to-one mapping, but some old codes map to several new codes — typically two to five candidates, up to thirty-eight in extreme cases.
 
-With theses cases, let's call them multivocal, a simple look up with mapping table alone cannot tell you which one applies to a given business activity in our old training set — you need the activity description and expert judgement.
+With these cases, let's call them multivocal, a simple lookup with a mapping table alone cannot tell you which one applies to a given business activity in our old training set — you need the activity description and expert judgement.
 
 
 :::
@@ -240,7 +240,7 @@ Human and Virtual Annotation
 **Expert agreement is imperfect**
 
 - 3-experts blind re-annotation: 62 % strict agreement, 96 % majority
-- Experts are far from converging systematically : we stay cautious when interpreting our precision metrics
+- Experts are far from converging systematically: we stay cautious when interpreting our precision metrics
 
 **Explicit reasoning protocol**
 
@@ -253,12 +253,12 @@ Human and Virtual Annotation
 ::: {.notes}
 About twenty-five NACE experts annotated thirty thousand items directly in NACE 2.1, focused on the multivocal cases. That gives us our ground truth.
 
-Two takeaways from this annotation campagne. 
-Agreement is really imperfect between experts. If you ask 3 experts to label the same sample, : three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six. 
+Two takeaways from this annotation campaign.
+Agreement is really imperfect between experts. If you ask 3 experts to label the same sample, three-way strict agreement is only sixty-two percent, two-out-of-three ninety-six.
 
 So, accuracy metrics must be read with a critical eye, or even with leniency.
 
-And the campaign made the expert reasoning more explicit for us, helping us to build a consistente LLM prompt . That's the next chapter.
+And the campaign made the expert reasoning more explicit for us, helping us build a consistent LLM prompt. That's the next chapter.
 :::
 
 
@@ -288,9 +288,11 @@ Methodology
 
 
 ::: {.notes}
-First decision: don't ask the LLM directly to classify into seven hundred and forty-six codes. Two reasons. NACE 2.1 is too recent — barely in any pre-training corpus, so the model falls back on NACE 2.0. And anyway, seven hundred and forty-six codes is a too large space for reliable open generation.
+First we don't ask the LLM directly to classify into seven hundred and thirty-two codes.
+Seven hundred and thirty-two codes is a too large space for reliable open generation, the LLM hallucinates very frequently.
 
-Instead: constrained selection. For each observation we know the legacy NACE 2.0 code. The correspondence table gives us the admissible NACE 2.1 codes — usually two to five. We ask the LLM to pick from that short list. Manageable prompt, decisions aligned with official rules.
+Instead: constrained selection is much better. 
+For each observation we know the legacy NACE 2.0 code. The correspondence table gives us the admissible NACE 2.1 codes — usually two to five. We ask the LLM to pick from that short list. Manageable prompt, decisions aligned with official rules.
 :::
 
 ## The pipeline {#section_3_2 .backgroundStandard_bleu}
@@ -330,7 +332,7 @@ A form of **Rule-Based Augmented Generation (RBAG)** with a deterministic retrie
 :::
 
 ::: {.notes}
-Let's describe the six steps pipeline. 
+Let's describe the six-step pipeline.
 
 - Get the activity text + optional precisions, 
 - get the legacy code, 
@@ -382,10 +384,10 @@ Methodology
 }
 ```
 
-- `codable`: was the description sufficient?
-- `nace_legacy_valid`: is the legacy code consistent?
 - `nace2.1`: the chosen code (or `null`)
+- `codable`: was the description sufficient?
 - `confidence`: model self-assessment (0–1)
+- `nace_legacy_valid`: is the legacy code consistent?
 :::
 
 :::
@@ -408,10 +410,10 @@ The prompt has two parts. A system prompt — same every time, defines the role.
 
 Output is a structured JSON with four fields. 
 
-- Codable: was the description sufficient (LLM's self assessement). 
 - nace2.1: the chosen code. 
-- nace_legacy_valid: a useful side benefit — the model flags suspicious legacy codes. 
+- Codable: was the description sufficient (LLM's self-assessment).
 - Confidence: LLM's self-assessed classification confidence, used to filter low-confidence cases.
+- nace_legacy_valid: a useful side benefit — the model flags suspicious legacy codes. 
 
 Forcing strict JSON is essential at scale — free-text answers are expensive to parse reliably.
 :::
@@ -431,12 +433,12 @@ Methodology
 
 ➕️ **Aggregation**: majority vote.
 
-Differents size, different throughput. 
+Different sizes, different throughput.
 
 
 ::: {.notes}
 We tried not to rely on a single LLM. So, we launch the classification process with three open-source MoE models in parallel — Qwen3-6-35B (with and without thinking) and Gemma4-26B.
-They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant is more than 10 times slower. Gemma4 sits in between talking about speed.
+They differ in size, throughput, and how often they decline when uncertain. The two Qwen3 runs share the same weights but the thinking variant is more than 10 times slower. Gemma4 sits in between in terms of speed.
 
 Each one is used as an independent virtual annotator. We aggregate the three predictions via a majority vote to make the final relabelling more accurate. Same idea as any ensemble: complementary errors cancel out.
 :::
@@ -479,7 +481,7 @@ Main elements of the technical stack:
 ::: {.notes}
 SSPCloud is Insee's data science platform, built on the open-source Onyxia project. Underneath, the whole platform runs on a Kubernetes cluster. The operational point is that every component of our pipeline is available as a one-click managed service in every SSPCloud project.
 
-For LLM inference we don't call vLLM directly: we go through the on-premise llm.lab gateway, which uses OpenWebUI and vLLM under the hood. Langfuse versions prompt teplates. MLflow tracks the classifier training. Argo Workflows orchestrates the pipeline as a Directed Acyclic Graph. MinIO is the shared S3 storage.
+For LLM inference we don't call vLLM directly: we go through the on-premise llm.lab gateway, which uses OpenWebUI and vLLM under the hood. Langfuse versions prompt templates. MLflow tracks the classifier training. Argo Workflows orchestrates the pipeline as a Directed Acyclic Graph. MinIO is the shared S3 storage.
 
 Entirely open-source, containerised, reproducible.
 :::
@@ -531,7 +533,7 @@ Accuracies at level 5 (sub-class) — % of cases where the predicted code matche
 ::: {.notes}
 At level five, each model lands around seventy-five percent overall and eighty-three to eighty-four on the LLM-only subset. The Qwen3 thinking variant adds one to two points at about ten times the cost of inference time.
 
-The majority vote wins on accuracy, But it means three full inference passes including a thinking run, so on one point four million items it's the bulk of our compute time.
+The majority vote wins on accuracy, but it means three full inference passes including a thinking run, so it comes at a significant cost in compute time.
 :::
 
 ## A note on self-reported confidence {#section_5_1ab .backgroundStandard_jaune}
@@ -541,12 +543,17 @@ Results
 :::
 
 - Hoped use: filter low-confidence predictions
-- Observed (all three LLMs): models are overconfident, correct and incorrect distributions overlap, raising the threshold trims coverage faster than it lifts precision
+- Observed (all three LLMs): 
+  - models are overconfident, 
+  - correct and incorrect distributions overlap, 
+  - raising the threshold trims coverage faster than it lifts precision
 
 [Self-reported confidence is not a reliable filter on its own.]{.bold}
 
 ::: {.notes}
-We hoped to use the LLM's self-reported confidence to filter low-quality predictions or gate an active-learning loop. Across all three models, that doesn't work: they are overconfident, correct and incorrect distributions overlap, and raising the threshold loses coverage faster than it gains precision. A useful signal would need something else, like consistency across runs or a separate verifier. Ongoing work.
+We hoped to use the LLM's self-reported confidence to filter low-quality predictions. 
+
+Across all three models, that doesn't work: they are overconfident, correct and incorrect distributions overlap, and raising the threshold loses coverage faster than it gains precision. A useful signal would need something else, like consistency across runs or a separate verifier. Ongoing work.
 :::
 
 ## Reconstructing the training set {#section_5_1b .backgroundStandard_jaune}
@@ -563,12 +570,12 @@ Once happy with the LLM on the benchmark, we apply at scale:
 - Distribution across predicted codes is **very close** to the labelled distribution
 
 ::: {.callout-tip}
-This is **semi-synthetic** data: real businesses, real descriptions, but algorithmic labels.
+This is **semi-synthetic** training set: real businesses, real descriptions, but algorithmic labels.
 :::
 
 ::: {.notes}
 Once happy with the LLM on the benchmark, we apply at scale: one point three million univocal items by table lookup, about one million multivocal items through the LLM pipeline, dropping uncodable cases. About two point 3 million labels in NACE 2.1, with a distribution close to the original. 
-I call this semi-synthetic training set — real businesses, real descriptions, but algorithmic labels.
+Let's call this a semi-synthetic training set — real businesses, real descriptions, but algorithmic labels.
 :::
 
 ## Performance of the retrained classifier {#section_5_2 .backgroundStandard_jaune}
@@ -597,9 +604,8 @@ overall accuracy on a representative NACE 2.1 test set
 
 
 ::: {.notes}
-Key question: can a classifier trained on LLM-generated labels match one trained on real human labels?
 
-The last time we retrained the TorchTextClassifiers model, the semi-synthetic corpus was still an earlier vintage — the pipeline shown today produces better labels than what fed that training. Even then, we reached around eighty percent overall accuracy on a representative NACE 2.1 test set. That's very comparable to what the previous-generation classifier achieves on its own NACE 2.0 task.
+The last time we retrained the TorchTextClassifiers model, the semi-synthetic corpus was still an earlier vintage — the pipeline shown today produces better labels than what fed that training. Even then, we reached around eighty percent overall accuracy on a representative NACE 2.1 test set. That's very comparable to what the previous-generation classifier achieves on its own NACE 2.0 task (trained on 100% human labels).
 
 That's the main take-away of the talk: semi-synthetic LLM labels can substitute for manual annotations in the early stages of a classification transition.
 :::
@@ -693,9 +699,10 @@ An Alternative: Pure RAG
 [Closing the gap needs better retriever **quality** (embeddings, reranker) — not a wider top-k.]{.bold}
 
 ::: {.notes}
-Now that the RAG pipeline is clear, the natural question is how it actually compares to RBAG. We ran both under identical conditions: same qwen3-6-35b-moe model, same prompt skeleton, same evaluation set of roughly twenty-eight thousand multivocal observations. Only the candidate-set source differs.
 
-At level five, RBAG reaches seventy-five percent overall and pure RAG sixty-five, about ten points behind. The bulk of that gap comes from the candidate set itself: the legacy mapping captures the true code ninety percent of the time, the RAG top-five only eighty-three percent.
+Running both pipelines under identical conditions, the RAG is about ten points behind the RBAG (sixty-five overall accuracy for the pure-Rag against seventy-five percent for the RBAG)
+
+The bulk of that gap comes from the candidate set itself: the legacy mapping and the  table lookup capture the true code ninety percent of the time, the RAG top-five only eighty-three percent.
 
 We also tested simply increasing the top-k (from five to ten). The candidate set grows and the truth shows up more often, but the LLM then has more noise to filter through. Its choice quality drops by roughly the same amount, so overall accuracy barely moves.
 
@@ -731,7 +738,7 @@ Conclusion and Perspectives
 - Inference cost is non-trivial at ~1 M queries
 - Legacy errors are inherited
 - Improving the RAG variant — embeddings, rerankers, hierarchy-aware retrieval
-- Extending to COICOP, ISCO, …
+- Extending to COICOP
 :::
 
 :::
@@ -739,7 +746,7 @@ Conclusion and Perspectives
 ::: {.notes}
 What we've shown: classification revisions can be handled by treating LLMs as virtual annotators, constrained by the correspondence table and official explanatory notes. The classifier trained on the semi-synthetic corpus matches our previous-generation production model.
 
-Why it matters: classification revisions are recurring — NACE every fifteen to twenty years, similar cycles for COICOP, ISCO,... The traditional bottleneck is two to three years waiting for human annotations. This shortens that delay significantly.
+It matters because classification revisions are recurring, and our approach drastically shortens the time needed to produce the manual annotations they usually require.
 
 A few open issues: inference cost is real and we inherit upstream errors. On the methodology side we're improving the RAG variant and extending the approach to other classifications.
 :::
